@@ -1,694 +1,782 @@
-var autopoiesis = (function () {
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-    var camera, scene, controls, renderer;
-    var projector, plane;
-    var mouse2D, mouse3D, ray, theta = 45,
-        isCtrlDown = false;
-    var ROLLOVERED;
-    var isLock = false;
-    var oldColor;
-    var objects = [];
-    var cubeLength = 40;
-    var isStart = false;
-    var isPause = false;
-    var _iteration = 50;
-    var settings = {
-        cubeLength: 40,
-        iteration: 50,
-        interval: 100,
-        palette: constants.palette.muzaffer,
-        percentage: {
-            core: 40,
-            block: 60
-        }
+const PALETTES = {
+  structure: { core: 0xd13b2f, block: 0xbeb8ab, accent: 0x1c1c1a, background: 0xd8d5cc },
+  purist: { core: 0x154da0, block: 0xeee9da, accent: 0xe9b72f, background: 0xd9d5c9 },
+  glass: { core: 0x274f45, block: 0xa9c4c8, accent: 0x343a3c, background: 0xd4d7d2 },
+  symmetry: { core: 0xb9475c, block: 0xf1c9b6, accent: 0x36847f, background: 0xe5d8c9 },
+  hotel: { core: 0x7d294b, block: 0xe8aab5, accent: 0xd7a620, background: 0xdfd0c2 },
+  noir: { core: 0xefc51d, block: 0x242321, accent: 0xc72e28, background: 0xc9c3b8 },
+  western: { core: 0xa62c25, block: 0xd39648, accent: 0x25292a, background: 0xd8c4a7 },
+  neon: { core: 0xd61f5c, block: 0x17636b, accent: 0xe9b72f, background: 0x26373a },
+  albers: { core: 0xd94b2b, block: 0xd8a62a, accent: 0x6d1e1e, background: 0xddd1ba },
+  mondrian: { core: 0xd9261c, block: 0xf2efe4, accent: 0x1646a0, background: 0xd8d6cf },
+  barragan: { core: 0xb51f63, block: 0xd8a43c, accent: 0x244b6b, background: 0xd9c8aa },
+  gray: { core: 0x242424, block: 0xd7cbb3, accent: 0x7c9a9a, background: 0xd4d2ca },
+  perriand: { core: 0x29433a, block: 0xa85d37, accent: 0xe7d8b7, background: 0xc9cbc4 },
+  delaunay: { core: 0xe55b2a, block: 0x2b5e9b, accent: 0xf0c438, background: 0xd8d3c4 },
+  klee: { core: 0xa94832, block: 0x7d8a68, accent: 0xd6a84a, background: 0xd2c6ad },
+  moholy: { core: 0x254f8f, block: 0xb8c1c4, accent: 0x1c2225, background: 0xd9dde0 },
+};
+
+const TRANSLATIONS = {
+  tr: {
+    manifesto: 'Kurallar biçimi üretir.<br>Boşluk sistemi görünür kılar.',
+    spatialSystem: 'MEKÂNSAL SİSTEM', parameters: 'PARAMETRELER',
+    moduleCountLabel: 'Modül sayısı', rhythmLabel: 'Ritim <small>ms</small>',
+    scaleLabel: 'Ölçek <small>br</small>', coreLabel: 'Çekirdek <small>%</small>', seedLabel: 'Üretim tohumu',
+    materialSystem: 'Malzeme düzeni', materialHint: 'çekirdek / kütle / vurgu',
+    paletteStructure: 'STRÜKTÜR', paletteStructureDesc: 'Kömür / beton / kırmızı',
+    palettePurist: 'PÜRİST', palettePuristDesc: 'Kobalt / kemik / sarı',
+    paletteGlass: 'CAM EV', paletteGlassDesc: 'Çelik / cam / yeşil',
+    paletteSymmetry: 'PASTEL SİMETRİ', paletteSymmetryDesc: 'Anderson esintisi',
+    paletteHotel: 'GRAND OTEL', paletteHotelDesc: 'Bordo / pudra / altın',
+    paletteNoir: 'SARI NOIR', paletteNoirDesc: 'Tarantino esintisi',
+    paletteWestern: 'ÇÖL FİNALİ', paletteWesternDesc: 'Kızıl / okra / kömür',
+    paletteNeon: 'NEON GECE', paletteNeonDesc: 'Fuşya / petrol / altın',
+    paletteAlbers: 'ALBERS ETÜDÜ', paletteAlbersDesc: 'Vermilyon / okra / bordo',
+    paletteMondrian: 'DE STIJL GRID', paletteMondrianDesc: 'Mondrian esintisi',
+    paletteBarragan: 'BARRAGÁN AVLUSU', paletteBarraganDesc: 'Fuşya / okra / mavi',
+    paletteGray: 'GRAY E-1027', paletteGrayDesc: 'Siyah / parşömen / krom',
+    palettePerriand: 'ALPİN MODERN', palettePerriandDesc: 'Perriand esintisi',
+    paletteDelaunay: 'EŞZAMANLI RİTİM', paletteDelaunayDesc: 'Delaunay esintisi',
+    paletteKlee: 'KLEE POLİFONİ', paletteKleeDesc: 'Pas / adaçayı / altın',
+    paletteMoholy: 'IŞIK-MEKÂN', paletteMoholyDesc: 'Moholy-Nagy esintisi',
+    instruction: '<strong>BAŞLANGIÇ NOKTASINI SEÇ</strong><br>Izgara üzerinde bir noktaya dokun.',
+    instructionContinue: '<strong>BÜYÜMEYİ SÜRDÜR</strong><br>Herhangi bir kattaki modülü yeni başlangıç olarak seç.',
+    moduleMeta: 'MODÜL', coreMeta: 'ÇEKİRDEK', reset: 'SIFIRLA', pause: 'DURAKLAT', resume: 'DEVAM ET',
+    audioOn: 'SES AÇ', audioOff: 'SES KAPAT', languageLabel: 'Dil seçimi', exportLabel: 'Görünümü PNG olarak indir',
+    canvasLabel: 'Üç boyutlu üretken yapı alanı',
+    footerManifesto: 'Açık plan / üretken strüktür / sonsuz varyasyon',
+    soundCredit: 'Ses: “Contemplation” — Joth / CC0',
+    footerHelp: '<kbd>CTRL</kbd> + seçim: modülü kaldır &nbsp;·&nbsp; sürükle: görünümü döndür &nbsp;·&nbsp; kaydır: yaklaş',
+    statusReady: 'HAZIR', statusRunning: 'ÜRETİLİYOR', statusRunningProgress: 'ÜRETİLİYOR {current}/{total}',
+    statusPaused: 'DURAKLATILDI', statusComplete: 'TAMAMLANDI', statusNoCells: 'UYGUN HÜCRE KALMADI',
+    noticeDeleteWhileRunning: 'Üretim sürerken modül kaldırılamaz. Önce duraklatın.',
+    noticeRemoved: 'Modül ve üretim kaydı kaldırıldı.',
+    noticeAudioFailed: 'Tarayıcı sesi başlatamadı. Ses düğmesine yeniden dokunun.',
+    noticeExportFailed: 'Görünüm dışa aktarılamadı.',
+  },
+  en: {
+    manifesto: 'Rules generate form.<br>Space makes the system visible.',
+    spatialSystem: 'SPATIAL SYSTEM', parameters: 'PARAMETERS',
+    moduleCountLabel: 'Module count', rhythmLabel: 'Rhythm <small>ms</small>',
+    scaleLabel: 'Scale <small>unit</small>', coreLabel: 'Core <small>%</small>', seedLabel: 'Generation seed',
+    materialSystem: 'Material order', materialHint: 'core / mass / accent',
+    paletteStructure: 'STRUCTURE', paletteStructureDesc: 'Coal / concrete / red',
+    palettePurist: 'PURIST', palettePuristDesc: 'Cobalt / bone / yellow',
+    paletteGlass: 'GLASS HOUSE', paletteGlassDesc: 'Steel / glass / green',
+    paletteSymmetry: 'PASTEL SYMMETRY', paletteSymmetryDesc: 'Anderson-inspired',
+    paletteHotel: 'GRAND HOTEL', paletteHotelDesc: 'Burgundy / blush / gold',
+    paletteNoir: 'YELLOW NOIR', paletteNoirDesc: 'Tarantino-inspired',
+    paletteWestern: 'DESERT FINALE', paletteWesternDesc: 'Crimson / ochre / coal',
+    paletteNeon: 'NEON NIGHT', paletteNeonDesc: 'Fuchsia / petrol / gold',
+    paletteAlbers: 'ALBERS STUDY', paletteAlbersDesc: 'Vermilion / ochre / burgundy',
+    paletteMondrian: 'DE STIJL GRID', paletteMondrianDesc: 'Mondrian-inspired',
+    paletteBarragan: 'BARRAGÁN COURT', paletteBarraganDesc: 'Fuchsia / ochre / blue',
+    paletteGray: 'GRAY E-1027', paletteGrayDesc: 'Black / parchment / chrome',
+    palettePerriand: 'ALPINE MODERN', palettePerriandDesc: 'Perriand-inspired',
+    paletteDelaunay: 'SIMULTANEOUS RHYTHM', paletteDelaunayDesc: 'Delaunay-inspired',
+    paletteKlee: 'KLEE POLYPHONY', paletteKleeDesc: 'Rust / sage / gold',
+    paletteMoholy: 'LIGHT-SPACE', paletteMoholyDesc: 'Moholy-Nagy-inspired',
+    instruction: '<strong>SELECT A STARTING POINT</strong><br>Touch a point on the grid.',
+    instructionContinue: '<strong>CONTINUE THE GROWTH</strong><br>Select a module on any level as the new origin.',
+    moduleMeta: 'MODULES', coreMeta: 'CORES', reset: 'RESET', pause: 'PAUSE', resume: 'RESUME',
+    audioOn: 'SOUND ON', audioOff: 'SOUND OFF', languageLabel: 'Language selection', exportLabel: 'Download view as PNG',
+    canvasLabel: 'Three-dimensional generative structure area',
+    footerManifesto: 'Open plan / generative structure / infinite variation',
+    soundCredit: 'Sound: “Contemplation” — Joth / CC0',
+    footerHelp: '<kbd>CTRL</kbd> + select: remove module &nbsp;·&nbsp; drag: orbit view &nbsp;·&nbsp; scroll: zoom',
+    statusReady: 'READY', statusRunning: 'GENERATING', statusRunningProgress: 'GENERATING {current}/{total}',
+    statusPaused: 'PAUSED', statusComplete: 'COMPLETE', statusNoCells: 'NO AVAILABLE CELLS',
+    noticeDeleteWhileRunning: 'Modules cannot be removed while generating. Pause first.',
+    noticeRemoved: 'Module and generation record removed.',
+    noticeAudioFailed: 'The browser could not start audio. Try the sound button again.',
+    noticeExportFailed: 'The view could not be exported.',
+  },
+};
+
+const DIRECTIONS = [
+  { x: 1, y: 0, z: 0 },
+  { x: -1, y: 0, z: 0 },
+  { x: 0, y: 1, z: 0 },
+  { x: 0, y: 0, z: 1 },
+  { x: 0, y: 0, z: -1 },
+];
+
+const elements = {
+  viewport: document.querySelector('#canvas'),
+  instruction: document.querySelector('#instruction'),
+  instructionCopy: document.querySelector('#instruction-copy'),
+  iteration: document.querySelector('#iteration'),
+  interval: document.querySelector('#interval'),
+  cubeLength: document.querySelector('#cubeLength'),
+  core: document.querySelector('#core'),
+  seed: document.querySelector('#seed'),
+  pause: document.querySelector('#pause'),
+  reset: document.querySelector('#reset'),
+  audio: document.querySelector('#audio'),
+  export: document.querySelector('#export'),
+  status: document.querySelector('#status'),
+  moduleCount: document.querySelector('#module-count'),
+  coreCount: document.querySelector('#core-count'),
+  notice: document.querySelector('#notice'),
+  threeVersion: document.querySelector('#three-version'),
+  paletteButtons: [...document.querySelectorAll('[data-palette]')],
+  languageButtons: [...document.querySelectorAll('[data-lang]')],
+};
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 1, 10000);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+const controls = new OrbitControls(camera, renderer.domElement);
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const structureGroup = new THREE.Group();
+
+let grid;
+let ground;
+let voxelGeometry;
+let cubeLength = 40;
+let activePalette = 'structure';
+let status = 'ready';
+let paused = false;
+let hoveredMesh = null;
+let pointerOrigin = null;
+let runToken = 0;
+let noticeTimer = null;
+let random = Math.random;
+let targetModuleCount = 50;
+let targetCoreCount = 20;
+
+const voxels = new Map();
+const cores = new Set();
+const growthCores = new Set();
+const backgroundAudio = new Audio(`${import.meta.env.BASE_URL}audio/contemplation.mp3`);
+backgroundAudio.loop = true;
+backgroundAudio.preload = 'metadata';
+backgroundAudio.volume = 0;
+
+let audioWanted = true;
+let audioFadeFrame = null;
+let currentLanguage = localStorage.getItem('autopoiesis-language-v2') === 'tr' ? 'tr' : 'en';
+let statusState = { key: 'statusReady', variables: {} };
+
+init();
+
+function init() {
+  elements.threeVersion.textContent = `R${THREE.REVISION}`;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.domElement.setAttribute('tabindex', '0');
+  elements.viewport.prepend(renderer.domElement);
+
+  scene.add(structureGroup);
+  scene.add(new THREE.HemisphereLight(0xf9f5ea, 0x77756f, 2.3));
+
+  const keyLight = new THREE.DirectionalLight(0xffffff, 3.4);
+  keyLight.position.set(480, 760, 320);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.camera.left = -900;
+  keyLight.shadow.camera.right = 900;
+  keyLight.shadow.camera.top = 900;
+  keyLight.shadow.camera.bottom = -900;
+  scene.add(keyLight);
+
+  const fillLight = new THREE.DirectionalLight(0x9cb4d3, 1.1);
+  fillLight.position.set(-400, 240, -360);
+  scene.add(fillLight);
+
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.07;
+  controls.minDistance = 180;
+  controls.maxDistance = 2600;
+  controls.maxPolarAngle = Math.PI * 0.49;
+  controls.target.set(0, 60, 0);
+
+  camera.position.set(620, 560, 820);
+  camera.lookAt(controls.target);
+
+  selectPalette(activePalette);
+  bindEvents();
+  applyLanguage(currentLanguage);
+  updateCounters();
+  attemptDefaultAudio();
+
+  const resizeObserver = new ResizeObserver(resizeRenderer);
+  resizeObserver.observe(elements.viewport);
+  renderer.setAnimationLoop(render);
+}
+
+function bindEvents() {
+  renderer.domElement.addEventListener('pointerdown', (event) => {
+    pointerOrigin = { x: event.clientX, y: event.clientY };
+  });
+
+  renderer.domElement.addEventListener('pointerup', (event) => {
+    if (!pointerOrigin) return;
+    const distance = Math.hypot(event.clientX - pointerOrigin.x, event.clientY - pointerOrigin.y);
+    pointerOrigin = null;
+    if (distance <= 5) handleCanvasSelection(event);
+  });
+
+  renderer.domElement.addEventListener('pointermove', handlePointerMove);
+  renderer.domElement.addEventListener('pointerleave', clearHover);
+  elements.pause.addEventListener('click', togglePause);
+  elements.reset.addEventListener('click', resetStructure);
+  elements.audio.addEventListener('click', toggleAudio);
+  elements.export.addEventListener('click', exportImage);
+  elements.cubeLength.addEventListener('change', handleScaleChange);
+
+  for (const button of elements.paletteButtons) {
+    button.addEventListener('click', () => selectPalette(button.dataset.palette));
+  }
+
+  for (const button of elements.languageButtons) {
+    button.addEventListener('click', () => applyLanguage(button.dataset.lang));
+  }
+
+  for (const input of [elements.iteration, elements.interval, elements.cubeLength, elements.core]) {
+    input.addEventListener('blur', () => validateInput(input));
+  }
+
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  document.addEventListener('pointerdown', startDefaultAudio, { capture: true, once: true });
+}
+
+function t(key, variables = {}) {
+  const template = TRANSLATIONS[currentLanguage][key] ?? TRANSLATIONS.tr[key] ?? key;
+  return Object.entries(variables).reduce(
+    (text, [name, value]) => text.replaceAll(`{${name}}`, String(value)),
+    template,
+  );
+}
+
+function applyLanguage(language) {
+  if (!TRANSLATIONS[language]) return;
+  currentLanguage = language;
+  localStorage.setItem('autopoiesis-language-v2', language);
+  document.documentElement.lang = language;
+
+  for (const node of document.querySelectorAll('[data-i18n]')) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of document.querySelectorAll('[data-i18n-html]')) {
+    node.innerHTML = t(node.dataset.i18nHtml);
+  }
+  for (const button of elements.languageButtons) {
+    button.setAttribute('aria-pressed', String(button.dataset.lang === language));
+  }
+
+  document.querySelector('.language-switch').setAttribute('aria-label', t('languageLabel'));
+  renderer.domElement.setAttribute('aria-label', t('canvasLabel'));
+  elements.export.setAttribute('aria-label', t('exportLabel'));
+  updateActionLabels();
+  elements.status.textContent = t(statusState.key, statusState.variables);
+}
+
+function setInstruction(key) {
+  elements.instructionCopy.dataset.i18nHtml = key;
+  elements.instructionCopy.innerHTML = t(key);
+}
+
+function updateActionLabels() {
+  elements.audio.setAttribute('aria-pressed', String(audioWanted));
+  elements.audio.textContent = t(audioWanted ? 'audioOff' : 'audioOn');
+  elements.pause.textContent = t(paused ? 'resume' : 'pause');
+}
+
+function startDefaultAudio(event) {
+  if (!audioWanted || event.target.closest('#audio')) return;
+  attemptDefaultAudio();
+}
+
+function attemptDefaultAudio() {
+  if (!audioWanted || !backgroundAudio.paused) return;
+  backgroundAudio.play().then(() => fadeAudio(0.2, 900)).catch(() => {
+    // Audible autoplay is commonly blocked; the first pointer gesture retries it.
+  });
+}
+
+async function toggleAudio() {
+  audioWanted = !audioWanted;
+  elements.audio.setAttribute('aria-pressed', String(audioWanted));
+  updateActionLabels();
+
+  if (!audioWanted) {
+    fadeAudio(0, 500, () => backgroundAudio.pause());
+    return;
+  }
+
+  try {
+    await backgroundAudio.play();
+    fadeAudio(0.2, 900);
+  } catch {
+    audioWanted = false;
+    elements.audio.setAttribute('aria-pressed', 'false');
+    updateActionLabels();
+    showNotice(t('noticeAudioFailed'));
+  }
+}
+
+function fadeAudio(targetVolume, duration, onComplete) {
+  if (audioFadeFrame) cancelAnimationFrame(audioFadeFrame);
+  const startVolume = backgroundAudio.volume;
+  const startedAt = performance.now();
+
+  function step(now) {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const eased = 1 - ((1 - progress) ** 3);
+    backgroundAudio.volume = THREE.MathUtils.lerp(startVolume, targetVolume, eased);
+    if (progress < 1) {
+      audioFadeFrame = requestAnimationFrame(step);
+    } else {
+      audioFadeFrame = null;
+      onComplete?.();
     }
-    var structurePosition = {};
-    init();
-    animate();
+  }
 
+  audioFadeFrame = requestAnimationFrame(step);
+}
 
-    function getRandomInt(max) {
-        return Math.floor(Math.random() * Math.floor(max));
+function handleVisibilityChange() {
+  if (document.hidden) {
+    backgroundAudio.pause();
+  } else if (audioWanted) {
+    backgroundAudio.play().then(() => fadeAudio(0.2, 350)).catch(() => {});
+  }
+}
+
+function resizeRenderer() {
+  const { width, height } = elements.viewport.getBoundingClientRect();
+  if (!width || !height) return;
+  renderer.setSize(width, height, false);
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+}
+
+function rebuildConstructionPlane({ rebuildVoxelGeometry = true } = {}) {
+  const palette = PALETTES[activePalette];
+  if (grid) {
+    scene.remove(grid);
+    grid.geometry.dispose();
+    grid.material.dispose();
+  }
+  if (ground) {
+    scene.remove(ground);
+    ground.geometry.dispose();
+    ground.material.dispose();
+  }
+  if (rebuildVoxelGeometry && voxelGeometry) voxelGeometry.dispose();
+
+  const size = cubeLength * 20;
+  grid = new THREE.GridHelper(size, 20, palette.accent, palette.accent);
+  grid.material.transparent = true;
+  grid.material.opacity = 0.58;
+  grid.position.y = -0.4;
+  scene.add(grid);
+
+  ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(size, size),
+    new THREE.ShadowMaterial({ color: 0x11110f, opacity: 0.16 }),
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  ground.userData.isGround = true;
+  scene.add(ground);
+
+  if (rebuildVoxelGeometry) {
+    voxelGeometry = new THREE.BoxGeometry(cubeLength, cubeLength, cubeLength);
+  }
+}
+
+function readSettings() {
+  const iteration = clampInteger(elements.iteration.value, 1, 500, 50);
+  const interval = clampInteger(elements.interval.value, 0, 2000, 90);
+  const scale = clampInteger(elements.cubeLength.value, 1, 10, 4);
+  const corePercentage = clampInteger(elements.core.value, 20, 80, 40);
+  const seed = elements.seed.value.trim() || 'AUTOPOIESIS';
+
+  elements.iteration.value = iteration;
+  elements.interval.value = interval;
+  elements.cubeLength.value = scale;
+  elements.core.value = corePercentage;
+  elements.seed.value = seed;
+
+  return { iteration, interval, cubeLength: scale * 10, corePercentage, seed };
+}
+
+function clampInteger(rawValue, min, max, fallback) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function validateInput(input) {
+  const settings = readSettings();
+  if (input === elements.cubeLength && status === 'ready' && settings.cubeLength !== cubeLength) {
+    cubeLength = settings.cubeLength;
+    rebuildConstructionPlane();
+  }
+}
+
+function handleScaleChange() {
+  if (status !== 'ready') return;
+  const settings = readSettings();
+  if (settings.cubeLength === cubeLength) return;
+  cubeLength = settings.cubeLength;
+  rebuildConstructionPlane();
+}
+
+function handleCanvasSelection(event) {
+  updateRaycaster(event);
+
+  if (event.ctrlKey || event.metaKey) {
+    if (status === 'running') {
+      showNotice(t('noticeDeleteWhileRunning'));
+      return;
     }
-
-    function getAxis() {
-        var axisValue = getRandomInt(5);
-        if (axisValue === 0) {
-            return constants.axis.x_pos;
-        }
-        if (axisValue === 1) {
-            return constants.axis.y_pos;
-        }
-        if (axisValue === 2) {
-            return constants.axis.z_pos;
-        }
-        if (axisValue === 3) {
-            return constants.axis.x_neg;
-        }
-        if (axisValue === 4) {
-            return constants.axis.z_neg;
-        }
-    }
-
-    function getElementType() {
-        var elementType = getRandomInt(2);
-        var coreCount = settings.iteration * settings.percentage.core / 100;
-        if (objects.length >= coreCount) {
-            return constants.type.block;
-        }
-        return elementType;
-    }
-
-    function getRandomObject() {
-        var index = getRandomInt(objects.length);
-        return objects[index];
-    }
-
-    function newObject(x, y, z) {
-        var obj = {
-            point: {
-                x,
-                y,
-                z
-            },
-            neighbour: {
-                x_pos: -1,
-                y_pos: -1,
-                z_pos: -1,
-                x_neg: -1,
-                z_neg: -1,
-            }
-        };
-        objects.push(obj);
-    }
-
-    function isFull(object, axis) {
-        var xStrPoint = object.point.x;
-        var yStrPoint = object.point.y;
-        var zStrPoint = object.point.z;
-
-        if (axis === constants.axis.x_pos) {
-            xStrPoint += cubeLength;
-        } else if (axis === constants.axis.y_pos) {
-            yStrPoint += cubeLength;
-        } else if (axis === constants.axis.z_pos) {
-            zStrPoint += cubeLength;
-        } else if (axis === constants.axis.x_neg) {
-            xStrPoint -= cubeLength;
-        } else if (axis === constants.axis.z_neg) {
-            zStrPoint -= cubeLength;
-        }
-        var newStructurepoint = '' + xStrPoint + yStrPoint + zStrPoint;
-        if (structurePosition[newStructurepoint] === 1) {
-            return true;
-        }
-        return false;
-    }
-
-    function buildStructure() {
-        console.log("Cekirdek sayisi: ", objects.length);
-        if (isPause) {
-            return;
-        }
-
-        if (_iteration > 0) {
-            var newElemtType = getElementType();
-            var axis, object;
-            while (true) {
-                var axis = getAxis();
-                var object = getRandomObject();
-                if (object.neighbour[axis] === -1) {
-                    if (!isFull(object, axis)) {
-                        if (axis === constants.axis.y_pos) {
-                            newElemtType = constants.type.core;
-                        }
-                        object.neighbour[axis] = newElemtType;
-                        break;
-                    }
-                }
-            }
-
-            var x = object.point.x;
-            var y = object.point.y;
-            var z = object.point.z;
-            var length = cubeLength;
-            var newNeighbour;
-
-            if (axis === constants.axis.x_pos) {
-                x += length;
-                newNeighbour = constants.axis.x_neg;
-            } else if (axis === constants.axis.y_pos) {
-                y += cubeLength;
-            } else if (axis === constants.axis.z_pos) {
-                z += length;
-                newNeighbour = constants.axis.z_neg;
-            } else if (axis === constants.axis.x_neg) {
-                x -= cubeLength;
-                newNeighbour = constants.axis.x_pos;
-            } else if (axis === constants.axis.z_neg) {
-                z -= length;
-                newNeighbour = constants.axis.z_pos;
-            }
-
-            var material;
-            var geometry = new THREE.CubeGeometry(cubeLength, cubeLength, cubeLength);
-            if (newElemtType === constants.type.block) {
-                for (var i = 0; i < geometry.faces.length; i++) {
-                    geometry.faces[i].color.setHex(settings.palette.block);
-                }
-                material = new THREE.MeshLambertMaterial({
-                    vertexColors: THREE.FaceColors
-                });
-
-            } else {
-                material = new THREE.MeshBasicMaterial({
-                    wireframe: true
-                });
-                material.color = new THREE.Color().setHex(settings.palette.core);
-            }
-
-            var voxel = new THREE.Mesh(geometry, material);
-
-            voxel.position.x = x;
-            voxel.position.y = y;
-            voxel.position.z = z;
-            voxel.matrixAutoUpdate = false;
-            voxel.updateMatrix();
-            scene.add(voxel);
-
-            if (newElemtType === constants.type.core) {
-                newObject(x, y, z);
-                if (newNeighbour)
-                    objects[objects.length - 1].neighbour[newNeighbour] = newElemtType;
-            }
-            structurePosition['' + x + y + z] = 1;
-
-            _iteration--;
-            document.getElementById("iteration").value = _iteration;
-            setTimeout(() => {
-                buildStructure();
-            }, settings.interval);
-        } else {
-            isStart = false;
-            document.getElementById("clean").innerHTML = 'Temizle';
-        }
-    }
-
-    function init() {
-
-        createSideBar();
-
-        camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 10000);
-        camera.position.y = 800;
-        camera.position.x = 1400 * Math.sin(theta * Math.PI / 360);
-        camera.position.z = 1400 * Math.cos(theta * Math.PI / 360);
-
-        controls = new THREE.OrbitControls(camera);
-        controls.addEventListener('change', render);
-        scene = new THREE.Scene();
-
-        addPlane();
-        // Lights
-        var ambientLight = new THREE.AmbientLight(0x606060);
-        scene.add(ambientLight);
-
-        var directionalLight = new THREE.DirectionalLight(0xffffff);
-        directionalLight.position.x = Math.random() - 0.5;
-        directionalLight.position.y = Math.random() - 0.5;
-        directionalLight.position.z = Math.random() - 0.5;
-        directionalLight.position.normalize();
-        scene.add(directionalLight);
-
-        var directionalLight = new THREE.DirectionalLight(0x808080);
-        directionalLight.position.x = Math.random() - 0.5;
-        directionalLight.position.y = Math.random() - 0.5;
-        directionalLight.position.z = Math.random() - 0.5;
-        directionalLight.position.normalize();
-        scene.add(directionalLight);
-        // Lights 
-
-        var divCanvas = document.getElementById("canvas");
-        renderer = new THREE.CanvasRenderer();
-        renderer.setSize(divCanvas.offsetWidth, divCanvas.offsetHeight - 28);
-        divCanvas.appendChild(renderer.domElement);
-
-
-        document.addEventListener('mousemove', onDocumentMouseMove, false);
-        document.addEventListener('mousedown', onDocumentMouseDown, false);
-        document.addEventListener('keydown', onDocumentKeyDown, false);
-        document.addEventListener('keyup', onDocumentKeyUp, false);
-        window.addEventListener('resize', onWindowResize, false);
-    }
-
-    function addPlane() {
-
-        // Grid
-        var size = cubeLength * 10,
-            step = cubeLength;
-
-        var geometry = new THREE.Geometry();
-
-        for (var i = -size; i <= size; i += step) {
-
-            geometry.vertices.push(new THREE.Vector3(-size, 0, i));
-            geometry.vertices.push(new THREE.Vector3(size, 0, i));
-
-            geometry.vertices.push(new THREE.Vector3(i, 0, -size));
-            geometry.vertices.push(new THREE.Vector3(i, 0, size));
-
-        }
-
-        var material = new THREE.LineBasicMaterial({
-            color: 0x000000,
-            opacity: 0.2
-        });
-
-        var line = new THREE.Line(geometry, material);
-        line.type = THREE.LinePieces;
-        scene.add(line);
-
-        //
-
-        projector = new THREE.Projector();
-        plane = new THREE.Mesh(new THREE.PlaneGeometry(cubeLength * 10 * 2, cubeLength * 10 * 2), new THREE.MeshBasicMaterial());
-        plane.rotation.x = -Math.PI / 2;
-        plane.visible = false;
-        scene.add(plane);
-
-        mouse2D = new THREE.Vector3(0, cubeLength * 10 * 2, 0.5);
-        ray = new THREE.Ray(camera.position, null);
-    }
-
-    function buttonEvent() {
-        if (isStart === true) {
-            if (isPause) {
-                isPause = false;
-                document.getElementById("clean").innerHTML = 'Duraklat';
-                buildStructure();
-            } else {
-                isPause = true;
-                document.getElementById("clean").innerHTML = 'Devam Et';
-            }
-        } else {
-            for (var i = scene.children.length - 1; i >= 0; i--) {
-                if (scene.children[i].geometry instanceof THREE.CubeGeometry) {
-                    scene.remove(scene.children[i]);
-                } else if (scene.children[i].geometry instanceof THREE.PlaneGeometry || scene.children[i].geometry instanceof THREE.Geometry) {
-                    scene.remove(scene.children[i]);
-                }
-            }
-            cubeLength = settings.cubeLength;
-            addPlane();
-            document.getElementById("iteration").value = settings.iteration;
-            document.getElementById("cubeLength").value = settings.cubeLength / 10;
-            objects = [];
-            structurePosition = {};
-            isLock = false;
-        }
-    }
-
-    function setValues() {
-        settings.iteration = document.getElementById("iteration").value;
-        settings.interval = document.getElementById("interval").value;
-        document.getElementById("clean").innerHTML = 'Duraklat';
-        isStart = true;
-    }
-
-    function onWindowResize() {
-
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-
-    }
-
-    function onDocumentMouseMove(event) {
-
-        event.preventDefault();
-
-        mouse2D.x = (event.clientX / window.innerWidth) * 2 - 1;
-        mouse2D.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-        mouse3D = projector.unprojectVector(mouse2D.clone(), camera);
-        ray.direction = mouse3D.subSelf(camera.position).normalize();
-
-        var intersects = ray.intersectObjects(scene.children);
-
-        if (intersects.length > 0) {
-
-            if (ROLLOVERED)
-                ROLLOVERED.color.setHex(oldColor);
-
-            ROLLOVERED = intersects[0].face;
-            oldColor = ROLLOVERED.color.getHex();
-            ROLLOVERED.color.setHex(settings.palette.select)
-        }
-    }
-
-    function onDocumentMouseDown(event) {
-        //event.preventDefault();
-        var intersects = ray.intersectObjects(scene.children);
-
-        if (intersects.length > 0) {
-
-            if (isCtrlDown) {
-                if (intersects[0].object != plane) {
-                    scene.remove(intersects[0].object);
-                }
-            } else {
-                if (!isLock) {
-                    setValues();
-                    _iteration = settings.iteration - 1;
-                    isLock = true;
-                    var position = new THREE.Vector3().add(intersects[0].point, intersects[0].object.matrixRotationWorld.multiplyVector3(
-                        intersects[0].face.normal.clone()));
-                    var geometry = new THREE.CubeGeometry(cubeLength, cubeLength, cubeLength);
-
-                    var material = new THREE.MeshBasicMaterial({
-                        wireframe: true
-                    });
-                    material.color = new THREE.Color().setHex(settings.palette.core);
-
-                    var voxel = new THREE.Mesh(geometry, material);
-                    voxel.position.x = Math.floor(position.x / cubeLength) * cubeLength + cubeLength / 2;
-                    voxel.position.y = Math.floor(position.y / cubeLength) * cubeLength + cubeLength / 2;
-                    voxel.position.z = Math.floor(position.z / cubeLength) * cubeLength + cubeLength / 2;
-
-                    var startPoint = {
-                        x: voxel.position.x,
-                        y: voxel.position.y,
-                        z: voxel.position.z,
-                    };
-
-                    voxel.matrixAutoUpdate = false;
-                    voxel.updateMatrix();
-                    scene.add(voxel);
-                    newObject(startPoint.x, startPoint.y, startPoint.z);
-                    buildStructure();
-                }
-            }
-        }
-    }
-
-    function onDocumentKeyDown(event) {
-        switch (event.keyCode) {
-            case 17:
-                isCtrlDown = true;
-                break;
-        }
-    }
-
-    function onDocumentKeyUp(event) {
-        switch (event.keyCode) {
-            case 17:
-                isCtrlDown = false;
-                break;
-        }
-    }
-
-    function save() {
-        window.open(renderer.domElement.toDataURL('image/png'), 'mywindow');
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        controls.update();
-        render();
-    }
-
-    function render() {
-        camera.lookAt(scene.position);
-        renderer.render(scene, camera);
-    }
-
-    function disableControls() {
-        controls.userRotate = false;
-    }
-
-    function enableControls() {
-        controls.userRotate = true;
-    }
-
-
-    function createSideBar() {
-
-        var sidebarDiv = document.getElementById("sidebar");
-        sidebarDiv.className = "sidebar";
-        var divCanvas = document.getElementById("canvas");
-        divCanvas.className = "pad";
-
-        //fill window
-        var windowHeight = window.innerHeight;
-
-        var divCanvasWidth = 98.5;
-        var divCanvasHeight = windowHeight - 28;
-
-        //set sidebar and pad sizes and store in 
-        divCanvas.setAttribute("style", "width:" + divCanvasWidth + "%;height:" + divCanvasHeight + "px;background:white");
-        sidebarDiv.setAttribute("style", "min-height:" + divCanvasHeight + "px;");
-
-        var e = document.createElement("SPAN");
-        e.className = "title";
-        e.innerHTML = "Autopoiesis";
-        e.innerHTML += '<span class="n">ITU</span>';
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        // ITERASYON
-        e = document.createElement("BR");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "İterasyon";
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("INPUT");
-        e.className = "number";
-        e.setAttribute("type", "text");
-        e.setAttribute("value", settings.iteration);
-        e.setAttribute("id", "iteration");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-
-        // INTERVAL
-        e = document.createElement("BR");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "Hız";
-        e.innerHTML += '<span class="m"> (ms)</span>';
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("INPUT");
-        e.className = "number";
-        e.setAttribute("type", "text");
-        e.setAttribute("value", settings.interval);
-        e.setAttribute("id", "interval");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        // Cube Length
-        e = document.createElement("BR");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "Boyut";
-        e.innerHTML += '<span class="m"> (Br)</span>';
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("INPUT");
-        e.className = "number";
-        e.setAttribute("type", "number");
-        e.setAttribute("value", settings.cubeLength / 10);
-        e.setAttribute("id", "cubeLength");
-        e.addEventListener('change', cubeLengthControl);
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        // BLOCK PERCENTAGE
-        e = document.createElement("BR");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "Blok";
-        e.innerHTML += '<span class="m"> (%)</span>';
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("INPUT");
-        e.className = "number";
-        e.setAttribute("type", "number");
-        e.setAttribute("value", settings.percentage.block);
-        e.setAttribute("id", "blok");
-        e.addEventListener('change', percentageControl);
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        // CORE PERCENTAGE
-        e = document.createElement("BR");
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "Çekirdek";
-        e.innerHTML += '<span class="m"> (%)</span>';
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("INPUT");
-        e.className = "number";
-        e.setAttribute("type", "number");
-        e.setAttribute("value", settings.percentage.core);
-        e.setAttribute("id", "core");
-        e.addEventListener('change', percentageControl);
-        sidebarDiv.appendChild(e);
-
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        // PALETTE
-
-        e = document.createElement("SPAN");
-        e.className = "letterLabel";
-        e.innerHTML = "Palet";
-        sidebarDiv.appendChild(e);
-
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        var button = makeButton("auto", "small", "Auto", false);
-        var image = makeImage("auto", "edit", "img/p3.PNG");
-        button.appendChild(image);
-        sidebarDiv.appendChild(button);
-        button.addEventListener("click", () => {
-            settings.palette = constants.palette.auto;
-        });
-
-        var button = makeButton("muzaffer", "small", "Muzaffer", false);
-        var image = makeImage("muzaffer", "edit", "img/p1.PNG");
-        button.appendChild(image);
-        sidebarDiv.appendChild(button);
-        button.addEventListener("click", () => {
-            settings.palette = constants.palette.muzaffer;
-        });
-
-        button = makeButton("rusen", "small", "Rusen", false);
-        image = makeImage("muzaffer", "edit", "img/p2.PNG");
-        button.appendChild(image);
-        sidebarDiv.appendChild(button);
-        button.addEventListener("click", () => {
-            settings.palette = constants.palette.rusen;
-        });
-
-        // CLEAN BUTTON
-        e = document.createElement("DIV");
-        e.className = "divSeparator";
-        sidebarDiv.appendChild(e);
-
-        var button = makeButton("clean", "clean", false, "Temizle");
-        sidebarDiv.appendChild(button);
-        button.addEventListener("click", buttonEvent);
-
-        sidebarDiv.addEventListener('mousedown', disableControls, false);
-        sidebarDiv.addEventListener('mouseup', enableControls, false);
+    const hit = raycaster.intersectObjects(structureGroup.children, false)[0];
+    if (hit) removeVoxel(hit.object.userData.key);
+    return;
+  }
+
+  if (status === 'complete') {
+    const hit = raycaster.intersectObjects(structureGroup.children, false)[0];
+    if (hit) extendStructure(hit.object.userData.key);
+    return;
+  }
+
+  if (status !== 'ready') return;
+  const hit = raycaster.intersectObject(ground, false)[0];
+  if (!hit) return;
+  startStructure(hit.point);
+}
+
+function startStructure(point) {
+  const settings = readSettings();
+  cubeLength = settings.cubeLength;
+  targetModuleCount = settings.iteration;
+  targetCoreCount = Math.max(1, Math.round(targetModuleCount * settings.corePercentage / 100));
+  random = mulberry32(hashSeed(settings.seed));
+  status = 'running';
+  paused = false;
+  runToken += 1;
+  growthCores.clear();
+
+  const start = {
+    x: snapCoordinate(point.x),
+    y: cubeLength / 2,
+    z: snapCoordinate(point.z),
+  };
+
+  addVoxel(start, 'core');
+  setConfigurationLocked(true);
+  elements.instruction.classList.add('is-hidden');
+  elements.pause.disabled = false;
+  updateActionLabels();
+  setStatus('statusRunning');
+  scheduleNextStep(runToken, settings.interval);
+}
+
+function extendStructure(anchorKey) {
+  const anchor = voxels.get(anchorKey);
+  if (!anchor) return;
+  const settings = readSettings();
+
+  promoteToCore(anchor);
+  growthCores.clear();
+  growthCores.add(anchorKey);
+  targetModuleCount = voxels.size + settings.iteration;
+  targetCoreCount = cores.size + Math.max(1, Math.round(settings.iteration * settings.corePercentage / 100));
+  random = mulberry32(hashSeed(`${settings.seed}:${anchorKey}:${voxels.size}`));
+  status = 'running';
+  paused = false;
+  runToken += 1;
+
+  elements.instruction.classList.add('is-hidden');
+  elements.pause.disabled = false;
+  updateActionLabels();
+  setStatus('statusRunningProgress', { current: voxels.size, total: targetModuleCount });
+  scheduleNextStep(runToken, settings.interval);
+}
+
+function promoteToCore(voxel) {
+  if (voxel.type === 'core') return;
+  const palette = PALETTES[activePalette];
+  voxel.type = 'core';
+  voxel.mesh.userData.type = 'core';
+  voxel.mesh.material.color.setHex(palette.core);
+  voxel.mesh.material.roughness = 0.48;
+  voxel.mesh.material.metalness = 0.18;
+  voxel.mesh.material.wireframe = true;
+  voxel.mesh.material.needsUpdate = true;
+  voxel.mesh.castShadow = false;
+  cores.add(voxel.key);
+  updateCounters();
+}
+
+function snapCoordinate(value) {
+  const snapped = Math.floor(value / cubeLength) * cubeLength + cubeLength / 2;
+  const groundLimit = cubeLength * 10 - cubeLength / 2;
+  return THREE.MathUtils.clamp(snapped, -groundLimit, groundLimit);
+}
+
+function scheduleNextStep(token, interval) {
+  if (token !== runToken || paused || status !== 'running') return;
+  if (voxels.size >= targetModuleCount) {
+    finishStructure();
+    return;
+  }
+
+  window.setTimeout(() => {
+    if (token !== runToken || paused || status !== 'running') return;
+    const frontier = getFrontier();
+    if (frontier.length === 0) {
+      finishStructure('statusNoCells');
+      return;
     }
 
-    function makeButton(id, className, title, text) {
-        var button = document.createElement("BUTTON");
-        if (className) {
-            button.setAttribute("class", className);
-        }
-        if (id) {
-            button.setAttribute("id", id);
-        }
-        if (title) {
-            button.setAttribute("title", title);
-        }
-        if (text) {
-            button.innerHTML = text;
-        }
-        return button;
+    const position = frontier[Math.floor(random() * frontier.length)];
+    addVoxel(position, chooseVoxelType());
+    scheduleNextStep(token, interval);
+  }, interval);
+}
+
+function getFrontier() {
+  const candidates = new Map();
+  for (const coreKey of growthCores) {
+    const core = voxels.get(coreKey);
+    if (!core) continue;
+    for (const direction of DIRECTIONS) {
+      const position = {
+        x: core.position.x + direction.x * cubeLength,
+        y: core.position.y + direction.y * cubeLength,
+        z: core.position.z + direction.z * cubeLength,
+      };
+      const key = positionKey(position);
+      if (!voxels.has(key) && isAllowedPosition(position)) candidates.set(key, position);
     }
+  }
+  return [...candidates.values()];
+}
 
-    function makeImage(id, className, src) {
-        var i = document.createElement("IMG");
-        if (className) {
-            i.setAttribute("class", className);
-        }
-        if (id) {
-            i.setAttribute("id", id);
-        }
-        if (src) {
-            i.setAttribute("src", src);
-        }
-        return i;
+function isAllowedPosition(position) {
+  const isGroundLevel = Math.abs(position.y - cubeLength / 2) < 0.001;
+  if (!isGroundLevel) return true;
+  const groundLimit = cubeLength * 10 - cubeLength / 2;
+  return Math.abs(position.x) <= groundLimit && Math.abs(position.z) <= groundLimit;
+}
+
+function chooseVoxelType() {
+  const coresNeeded = targetCoreCount - cores.size;
+  const placementsRemaining = targetModuleCount - voxels.size;
+  if (coresNeeded <= 0) return 'block';
+  if (coresNeeded >= placementsRemaining) return 'core';
+  return random() < coresNeeded / placementsRemaining ? 'core' : 'block';
+}
+
+function addVoxel(position, type) {
+  const key = positionKey(position);
+  if (voxels.has(key)) return false;
+
+  const palette = PALETTES[activePalette];
+  const material = new THREE.MeshStandardMaterial({
+    color: type === 'core' ? palette.core : palette.block,
+    roughness: type === 'core' ? 0.48 : 0.82,
+    metalness: type === 'core' ? 0.18 : 0.02,
+    wireframe: type === 'core',
+  });
+  const mesh = new THREE.Mesh(voxelGeometry, material);
+  mesh.position.set(position.x, position.y, position.z);
+  mesh.castShadow = type === 'block';
+  mesh.receiveShadow = true;
+  mesh.userData = { key, type };
+  structureGroup.add(mesh);
+
+  voxels.set(key, { key, type, position: { ...position }, mesh });
+  if (type === 'core') {
+    cores.add(key);
+    growthCores.add(key);
+  }
+  updateCounters();
+  return true;
+}
+
+function removeVoxel(key) {
+  const voxel = voxels.get(key);
+  if (!voxel) return;
+  clearHover();
+  structureGroup.remove(voxel.mesh);
+  voxel.mesh.material.dispose();
+  voxels.delete(key);
+  cores.delete(key);
+  growthCores.delete(key);
+  updateCounters();
+  showNotice(t('noticeRemoved'));
+}
+
+function positionKey({ x, y, z }) {
+  return `${x},${y},${z}`;
+}
+
+function finishStructure(statusKey = 'statusComplete') {
+  status = 'complete';
+  paused = false;
+  elements.pause.disabled = true;
+  updateActionLabels();
+  setStatus(statusKey);
+  setInstruction('instructionContinue');
+  elements.instruction.classList.remove('is-hidden');
+}
+
+function togglePause() {
+  if (status !== 'running') return;
+  paused = !paused;
+  if (paused) {
+    runToken += 1;
+    updateActionLabels();
+    setStatus('statusPaused');
+  } else {
+    updateActionLabels();
+    setStatus('statusRunning');
+    runToken += 1;
+    scheduleNextStep(runToken, readSettings().interval);
+  }
+}
+
+function resetStructure() {
+  runToken += 1;
+  paused = false;
+  status = 'ready';
+  clearHover();
+  for (const voxel of voxels.values()) voxel.mesh.material.dispose();
+  structureGroup.clear();
+  voxels.clear();
+  cores.clear();
+  growthCores.clear();
+  setConfigurationLocked(false);
+  elements.pause.disabled = true;
+  updateActionLabels();
+  elements.instruction.classList.remove('is-hidden');
+  setInstruction('instruction');
+  setStatus('statusReady');
+  updateCounters();
+}
+
+function setConfigurationLocked(locked) {
+  for (const input of [elements.iteration, elements.interval, elements.cubeLength, elements.core, elements.seed]) {
+    input.disabled = locked;
+  }
+}
+
+function selectPalette(name) {
+  if (!PALETTES[name]) return;
+  activePalette = name;
+  const palette = PALETTES[name];
+  scene.background = new THREE.Color(palette.background);
+  rebuildConstructionPlane({ rebuildVoxelGeometry: voxels.size === 0 });
+
+  for (const voxel of voxels.values()) {
+    voxel.mesh.material.color.setHex(voxel.type === 'core' ? palette.core : palette.block);
+    if (voxel.mesh === hoveredMesh) {
+      voxel.mesh.material.emissive.setHex(palette.accent);
     }
+    voxel.mesh.material.needsUpdate = true;
+  }
+  for (const button of elements.paletteButtons) {
+    const selected = button.dataset.palette === name;
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-pressed', String(selected));
+  }
+}
 
-    function percentageControl(event) {
-        var blockPercentage = document.getElementById("blok").value;
-        var corePercentage = document.getElementById("core").value;
+function handlePointerMove(event) {
+  updateRaycaster(event);
+  const hit = raycaster.intersectObjects(structureGroup.children, false)[0];
+  const nextMesh = hit?.object ?? null;
+  if (nextMesh === hoveredMesh) return;
+  clearHover();
+  if (!nextMesh) return;
+  hoveredMesh = nextMesh;
+  hoveredMesh.material.emissive.setHex(PALETTES[activePalette].accent);
+  hoveredMesh.material.emissiveIntensity = 0.42;
+}
 
-        if (blockPercentage < 20 || blockPercentage > 80) {
-            document.getElementById("blok").value = settings.percentage.block;
-            return;
-        }
+function clearHover() {
+  if (!hoveredMesh) return;
+  hoveredMesh.material.emissive.setHex(0x000000);
+  hoveredMesh.material.emissiveIntensity = 0;
+  hoveredMesh = null;
+}
 
-        if (corePercentage < 20 || corePercentage > 80) {
-            document.getElementById("core").value = settings.percentage.core;
-            return;
-        }
+function updateRaycaster(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+}
 
-        if (event.target.id === "blok") {
-            settings.percentage.block = document.getElementById("blok").value;
-            settings.percentage.core = 100 - settings.percentage.block;
-            document.getElementById("core").value = settings.percentage.core;
-        } else {
-            settings.percentage.core = document.getElementById("core").value;
-            settings.percentage.block = 100 - settings.percentage.core;
-            document.getElementById("blok").value = settings.percentage.block;
-        }
+function updateCounters() {
+  elements.moduleCount.textContent = String(voxels.size).padStart(3, '0');
+  elements.coreCount.textContent = String(cores.size).padStart(3, '0');
+  if (status === 'running') {
+    setStatus('statusRunningProgress', { current: voxels.size, total: targetModuleCount });
+  }
+}
+
+function setStatus(key, variables = {}) {
+  statusState = { key, variables };
+  elements.status.textContent = t(key, variables);
+}
+
+function showNotice(message) {
+  window.clearTimeout(noticeTimer);
+  elements.notice.textContent = message;
+  elements.notice.classList.add('is-visible');
+  noticeTimer = window.setTimeout(() => elements.notice.classList.remove('is-visible'), 2600);
+}
+
+function exportImage() {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob((blob) => {
+    if (!blob) {
+      showNotice(t('noticeExportFailed'));
+      return;
     }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `autopoiesis-${elements.seed.value.trim() || 'structure'}.png`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }, 'image/png');
+}
 
-    function cubeLengthControl() {
-        if (isStart || isLock) {
-            return;
-        }
+function hashSeed(seed) {
+  let hash = 2166136261;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash ^= seed.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 
-        value = document.getElementById("cubeLength").value * 10;
+function mulberry32(seed) {
+  return function seededRandom() {
+    let value = seed += 0x6d2b79f5;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
 
-        if (value < 0 || value > 100) {
-            value = settings.cubeLength;
-            document.getElementById("cubeLength").value = value / 10;
-        }
-
-        for (var i = scene.children.length - 1; i >= 0; i--) {
-            if (scene.children[i].geometry instanceof THREE.PlaneGeometry || scene.children[i].geometry instanceof THREE.Geometry) {
-                scene.remove(scene.children[i]);
-            }
-        }
-        settings.cubeLength = value;
-        cubeLength = value;
-        addPlane();
-    }
-})();
+function render() {
+  controls.update();
+  renderer.render(scene, camera);
+}

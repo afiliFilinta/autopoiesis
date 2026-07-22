@@ -1,28 +1,174 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-	<title>Autopoiesis</title>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-	<link rel="stylesheet" type="text/css" href="autopoiesis.css">
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#e7e3da">
+  <meta name="description" content="Kurallardan mekân üreten deneysel üç boyutlu yapı laboratuvarı.">
+  <title>Autopoiesis — Mekânsal Sistem</title>
+  <link rel="stylesheet" href="./autopoiesis.css">
 </head>
-
 <body>
-	<div id="sidebar"></div>
-	<div id="canvas"></div>
+  <main class="app-shell">
+    <header class="masthead">
+      <a class="wordmark" href="#" aria-label="Autopoiesis ana görünüm">
+        <span class="wordmark-index">A/01</span>
+        <span>AUTO<br>POIESIS</span>
+      </a>
+      <p class="manifesto" data-i18n-html="manifesto">Kurallar biçimi üretir.<br>Boşluk sistemi görünür kılar.</p>
+      <div class="revision" aria-label="Three.js sürümü">
+        <div class="header-tools">
+          <button id="audio" class="utility-button" type="button" aria-pressed="true">SOUND OFF</button>
+          <div class="language-switch" role="group" aria-label="Dil seçimi">
+            <button type="button" data-lang="tr" aria-pressed="false">TR</button>
+            <button type="button" data-lang="en" aria-pressed="true">EN</button>
+          </div>
+        </div>
+        <div class="revision-copy">
+          <span data-i18n="spatialSystem">MEKÂNSAL SİSTEM</span>
+          <strong>THREE.JS <span id="three-version">R—</span></strong>
+        </div>
+      </div>
+    </header>
 
-	<script src="build/three.min.js"></script>
-	<script src="js/controls/OrbitControls.js"></script>
-	<script src="js/Detector.js"></script>
-	<script src="js/libs/stats.min.js"></script>
-	<script src="js/exporters/OBJExporter.js"></script>
-	<script src="constants.js"></script>
-	<script src="download.js"></script>
-	<script src="autopoiesis.js"></script>
+    <section class="workspace" aria-label="Üç boyutlu çalışma alanı">
+      <aside class="control-rail" aria-label="Yapı parametreleri">
+        <div class="rail-heading">
+          <span data-i18n="parameters">PARAMETRELER</span>
+          <span>01—06</span>
+        </div>
 
+        <div class="control-grid">
+          <label class="control" for="iteration">
+            <span class="control-number">01</span>
+            <span class="control-label" data-i18n="moduleCountLabel">Modül sayısı</span>
+            <input id="iteration" type="number" value="50" min="1" max="500" step="1">
+          </label>
 
+          <label class="control" for="interval">
+            <span class="control-number">02</span>
+            <span class="control-label" data-i18n-html="rhythmLabel">Ritim <small>ms</small></span>
+            <input id="interval" type="number" value="90" min="0" max="2000" step="10">
+          </label>
+
+          <label class="control" for="cubeLength">
+            <span class="control-number">03</span>
+            <span class="control-label" data-i18n-html="scaleLabel">Ölçek <small>br</small></span>
+            <input id="cubeLength" type="number" value="4" min="1" max="10" step="1">
+          </label>
+
+          <label class="control" for="core">
+            <span class="control-number">04</span>
+            <span class="control-label" data-i18n-html="coreLabel">Çekirdek <small>%</small></span>
+            <input id="core" type="number" value="40" min="20" max="80" step="5">
+          </label>
+
+          <label class="control control-wide" for="seed">
+            <span class="control-number">05</span>
+            <span class="control-label" data-i18n="seedLabel">Üretim tohumu</span>
+            <input id="seed" type="text" value="CORBUSIER-1923" maxlength="32" spellcheck="false">
+          </label>
+        </div>
+
+        <fieldset class="palette-fieldset">
+          <legend><span>06</span> <b data-i18n="materialSystem">Malzeme düzeni</b> <small data-i18n="materialHint">çekirdek / kütle / vurgu</small></legend>
+          <div class="palette-list">
+            <button class="palette is-active" type="button" data-palette="structure" aria-pressed="true">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteStructure">STRÜKTÜR</strong><small data-i18n="paletteStructureDesc">Kömür / beton / kırmızı</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="purist" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="palettePurist">PÜRİST</strong><small data-i18n="palettePuristDesc">Kobalt / kemik / sarı</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="glass" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteGlass">CAM EV</strong><small data-i18n="paletteGlassDesc">Çelik / cam / yeşil</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="symmetry" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteSymmetry">PASTEL SİMETRİ</strong><small data-i18n="paletteSymmetryDesc">Anderson esintisi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="hotel" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteHotel">GRAND OTEL</strong><small data-i18n="paletteHotelDesc">Bordo / pudra / altın</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="noir" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteNoir">SARI NOIR</strong><small data-i18n="paletteNoirDesc">Tarantino esintisi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="western" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteWestern">ÇÖL FİNALİ</strong><small data-i18n="paletteWesternDesc">Kızıl / okra / kömür</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="neon" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteNeon">NEON GECE</strong><small data-i18n="paletteNeonDesc">Fuşya / petrol / altın</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="albers" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteAlbers">ALBERS ETÜDÜ</strong><small data-i18n="paletteAlbersDesc">Vermilyon / okra / bordo</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="mondrian" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteMondrian">DE STIJL GRID</strong><small data-i18n="paletteMondrianDesc">Mondrian esintisi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="barragan" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteBarragan">BARRAGÁN AVLUSU</strong><small data-i18n="paletteBarraganDesc">Fuşya / okra / mavi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="gray" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteGray">GRAY E-1027</strong><small data-i18n="paletteGrayDesc">Siyah / parşömen / krom</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="perriand" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="palettePerriand">ALPİN MODERN</strong><small data-i18n="palettePerriandDesc">Perriand esintisi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="delaunay" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteDelaunay">EŞZAMANLI RİTİM</strong><small data-i18n="paletteDelaunayDesc">Delaunay esintisi</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="klee" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteKlee">KLEE POLİFONİ</strong><small data-i18n="paletteKleeDesc">Pas / adaçayı / altın</small></span>
+            </button>
+            <button class="palette" type="button" data-palette="moholy" aria-pressed="false">
+              <span class="swatch"><i></i><i></i><i></i></span>
+              <span><strong data-i18n="paletteMoholy">IŞIK-MEKÂN</strong><small data-i18n="paletteMoholyDesc">Moholy-Nagy esintisi</small></span>
+            </button>
+          </div>
+        </fieldset>
+
+        <div class="actions">
+          <button id="pause" class="action action-primary" type="button" disabled>DURAKLAT</button>
+          <button id="reset" class="action" type="button" data-i18n="reset">SIFIRLA</button>
+          <button id="export" class="action action-square" type="button" aria-label="Görünümü PNG olarak indir">↓ PNG</button>
+        </div>
+      </aside>
+
+      <div id="canvas" class="viewport">
+        <div class="viewport-instruction" id="instruction">
+          <span class="instruction-mark"></span>
+          <p id="instruction-copy" data-i18n-html="instruction"><strong>BAŞLANGIÇ NOKTASINI SEÇ</strong><br>Izgara üzerinde bir noktaya dokun.</p>
+        </div>
+        <div class="axis-labels" aria-hidden="true"><span>X</span><span>Y</span><span>Z</span></div>
+        <div class="viewport-meta">
+          <span id="status">HAZIR</span>
+          <span><b id="module-count">000</b> <i data-i18n="moduleMeta">MODÜL</i></span>
+          <span><b id="core-count">000</b> <i data-i18n="coreMeta">ÇEKİRDEK</i></span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <p data-i18n="footerManifesto">Açık plan / üretken strüktür / sonsuz varyasyon</p>
+      <p class="sound-credit" data-i18n="soundCredit">Ses: “Contemplation” — Joth / CC0</p>
+      <p data-i18n-html="footerHelp"><kbd>CTRL</kbd> + seçim: modülü kaldır &nbsp;·&nbsp; sürükle: görünümü döndür &nbsp;·&nbsp; kaydır: yaklaş</p>
+    </footer>
+  </main>
+
+  <div id="notice" class="notice" role="status" aria-live="polite"></div>
+  <script type="module" src="./autopoiesis.js"></script>
 </body>
-
 </html>
