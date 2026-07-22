@@ -126,6 +126,7 @@ const elements = {
   threeVersion: document.querySelector('#three-version'),
   paletteButtons: [...document.querySelectorAll('[data-palette]')],
   languageButtons: [...document.querySelectorAll('[data-lang]')],
+  axisLabels: [...document.querySelectorAll('.axis-labels span')],
 };
 
 const scene = new THREE.Scene();
@@ -411,7 +412,7 @@ function readSettings() {
   const interval = clampInteger(elements.interval.value, 0, 2000, 90);
   const scale = clampInteger(elements.cubeLength.value, 1, 10, 4);
   const corePercentage = clampInteger(elements.core.value, 20, 80, 40);
-  const seed = elements.seed.value.trim() || 'AUTOPOIESIS';
+  const seed = 'CORBUSIER-1923';
 
   elements.iteration.value = iteration;
   elements.interval.value = interval;
@@ -681,7 +682,7 @@ function resetStructure() {
 }
 
 function setConfigurationLocked(locked) {
-  for (const input of [elements.iteration, elements.interval, elements.cubeLength, elements.core, elements.seed]) {
+  for (const input of [elements.iteration, elements.interval, elements.cubeLength, elements.core]) {
     input.disabled = locked;
   }
 }
@@ -692,6 +693,7 @@ function selectPalette(name) {
   const palette = PALETTES[name];
   scene.background = new THREE.Color(palette.background);
   rebuildConstructionPlane({ rebuildVoxelGeometry: voxels.size === 0 });
+  updateAxisColors(palette);
 
   for (const voxel of voxels.values()) {
     voxel.mesh.material.color.setHex(voxel.type === 'core' ? palette.core : palette.block);
@@ -705,6 +707,23 @@ function selectPalette(name) {
     button.classList.toggle('is-active', selected);
     button.setAttribute('aria-pressed', String(selected));
   }
+}
+
+function updateAxisColors(palette) {
+  const colors = [palette.core, palette.block, palette.accent];
+  elements.axisLabels.forEach((label, index) => {
+    const color = colors[index];
+    label.style.backgroundColor = `#${color.toString(16).padStart(6, '0')}`;
+    label.style.color = getContrastColor(color);
+  });
+}
+
+function getContrastColor(hexColor) {
+  const red = (hexColor >> 16) & 255;
+  const green = (hexColor >> 8) & 255;
+  const blue = hexColor & 255;
+  const luminance = (red * 299 + green * 587 + blue * 114) / 1000;
+  return luminance > 150 ? '#11110f' : '#ffffff';
 }
 
 function handlePointerMove(event) {

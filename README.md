@@ -1,28 +1,28 @@
 # Autopoiesis
 
-Kurallardan üç boyutlu mekânsal yapılar üreten deneysel bir Three.js laboratuvarı.
+An experimental Three.js laboratory that generates three-dimensional spatial structures from rules.
 
-## Çalıştırma
+## Running locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Geliştirme sunucusunun verdiği adreste `autopoiesis.html` sayfasını açın.
+Open the `autopoiesis.html` page at the address provided by the development server.
 
-## Kullanım
+## Usage
 
-- Izgara üzerinde bir noktaya tıklayarak üretimi başlatın.
-- Sürükleyerek kamerayı döndürün, kaydırarak yaklaşın.
-- Üretimi duraklatıp devam ettirebilirsiniz.
-- Üretim durduğunda `Ctrl`/`Cmd` ile bir modüle tıklayarak onu kaldırabilirsiniz.
-- Aynı üretim tohumu ve parametreler aynı yapıyı oluşturur.
+- Click a point on the grid to start generating a structure.
+- Drag to orbit the camera and scroll to zoom.
+- Pause and resume the generation process at any time.
+- When generation is stopped, `Ctrl`/`Cmd`-click a module to remove it.
+- Using the same generation seed and parameters produces the same structure.
 
-## Teknoloji
+## Technology
 
 - Three.js r184
 - Vite
 - ES modules
 
-MIT lisanslıdır.
+Licensed under the MIT License.

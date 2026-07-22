@@ -256,6 +256,11 @@ button {
   letter-spacing: .035em;
 }
 
+.control input[readonly] {
+  cursor: default;
+  user-select: all;
+}
+
 .control:focus-within {
   background: #fff;
   box-shadow: inset 4px 0 0 var(--red);
