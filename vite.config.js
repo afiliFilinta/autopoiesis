@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
 
 export default defineConfig({
+  base: '/autopoiesis/',
   build: {
     chunkSizeWarningLimit: 600,
     rollupOptions: {
