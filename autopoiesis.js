@@ -122,6 +122,7 @@ const elements = {
   moduleCount: document.querySelector('#module-count'),
   coreCount: document.querySelector('#core-count'),
   notice: document.querySelector('#notice'),
+  backgroundAudio: document.querySelector('#background-audio'),
   threeVersion: document.querySelector('#three-version'),
   paletteButtons: [...document.querySelectorAll('[data-palette]')],
   languageButtons: [...document.querySelectorAll('[data-lang]')],
@@ -153,9 +154,9 @@ let targetCoreCount = 20;
 const voxels = new Map();
 const cores = new Set();
 const growthCores = new Set();
-const backgroundAudio = new Audio(`${import.meta.env.BASE_URL}audio/contemplation.mp3`);
+const backgroundAudio = elements.backgroundAudio;
 backgroundAudio.loop = true;
-backgroundAudio.preload = 'metadata';
+backgroundAudio.preload = 'auto';
 backgroundAudio.volume = 0;
 
 let audioWanted = true;
@@ -248,6 +249,13 @@ function bindEvents() {
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('pointerdown', startDefaultAudio, { capture: true, once: true });
+  backgroundAudio.addEventListener('ended', recoverAudioPlayback);
+  backgroundAudio.addEventListener('stalled', recoverAudioPlayback);
+  backgroundAudio.addEventListener('pause', () => {
+    if (audioWanted && !document.hidden) {
+      window.setTimeout(attemptDefaultAudio, 250);
+    }
+  });
 }
 
 function t(key, variables = {}) {
@@ -346,11 +354,13 @@ function fadeAudio(targetVolume, duration, onComplete) {
 }
 
 function handleVisibilityChange() {
-  if (document.hidden) {
-    backgroundAudio.pause();
-  } else if (audioWanted) {
-    backgroundAudio.play().then(() => fadeAudio(0.2, 350)).catch(() => {});
-  }
+  if (!document.hidden && audioWanted) attemptDefaultAudio();
+}
+
+function recoverAudioPlayback() {
+  if (!audioWanted) return;
+  if (backgroundAudio.ended) backgroundAudio.currentTime = 0;
+  attemptDefaultAudio();
 }
 
 function resizeRenderer() {
