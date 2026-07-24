@@ -44,15 +44,16 @@ const TRANSLATIONS = {
     paletteKlee: 'KLEE POLİFONİ', paletteKleeDesc: 'Pas / adaçayı / altın',
     paletteMoholy: 'IŞIK-MEKÂN', paletteMoholyDesc: 'Moholy-Nagy esintisi',
     instruction: '<strong>BAŞLANGIÇ NOKTASINI SEÇ</strong><br>Izgara üzerinde bir noktaya dokun.',
-    instructionContinue: '<strong>BÜYÜMEYİ SÜRDÜR</strong><br>Herhangi bir kattaki modülü yeni başlangıç olarak seç.',
-    moduleMeta: 'MODÜL', coreMeta: 'ÇEKİRDEK', reset: 'SIFIRLA', pause: 'DURAKLAT', resume: 'DEVAM ET',
+    instructionContinue: '<strong>DÖNGÜ TAMAMLANDI</strong><br>Geriye yalnızca düzlem kaldı.',
+    moduleMeta: 'MODÜL', coreMeta: 'TAŞIYICI', destroyedMeta: 'YIKIM', reset: 'SIFIRLA', pause: 'DURAKLAT', resume: 'DEVAM ET',
     audioOn: 'SES AÇ', audioOff: 'SES KAPAT', languageLabel: 'Dil seçimi', exportLabel: 'Görünümü PNG olarak indir',
     canvasLabel: 'Üç boyutlu üretken yapı alanı',
     footerManifesto: 'Açık plan / üretken strüktür / sonsuz varyasyon',
     soundCredit: 'Ses: “Contemplation” — Joth / CC0',
-    footerHelp: '<kbd>CTRL</kbd> + seçim: modülü kaldır &nbsp;·&nbsp; sürükle: görünümü döndür &nbsp;·&nbsp; kaydır: yaklaş',
+    footerHelp: 'seçim: o noktadan üret &nbsp;·&nbsp; <kbd>CTRL</kbd> + seçim: kaldır &nbsp;·&nbsp; sürükle: döndür',
     statusReady: 'HAZIR', statusRunning: 'ÜRETİLİYOR', statusRunningProgress: 'ÜRETİLİYOR {current}/{total}',
     statusPaused: 'DURAKLATILDI', statusComplete: 'TAMAMLANDI', statusNoCells: 'UYGUN HÜCRE KALMADI',
+    statusDeconstructing: 'ÇÖZÜLÜYOR', statusSupports: 'TAŞIYICILAR ÇÖZÜLÜYOR', statusVoid: 'HİÇLİK',
     noticeDeleteWhileRunning: 'Üretim sürerken modül kaldırılamaz. Önce duraklatın.',
     noticeRemoved: 'Modül ve üretim kaydı kaldırıldı.',
     noticeAudioFailed: 'Tarayıcı sesi başlatamadı. Ses düğmesine yeniden dokunun.',
@@ -81,15 +82,16 @@ const TRANSLATIONS = {
     paletteKlee: 'KLEE POLYPHONY', paletteKleeDesc: 'Rust / sage / gold',
     paletteMoholy: 'LIGHT-SPACE', paletteMoholyDesc: 'Moholy-Nagy-inspired',
     instruction: '<strong>SELECT A STARTING POINT</strong><br>Touch a point on the grid.',
-    instructionContinue: '<strong>CONTINUE THE GROWTH</strong><br>Select a module on any level as the new origin.',
-    moduleMeta: 'MODULES', coreMeta: 'CORES', reset: 'RESET', pause: 'PAUSE', resume: 'RESUME',
+    instructionContinue: '<strong>THE CYCLE IS COMPLETE</strong><br>Only the plane remains.',
+    moduleMeta: 'MODULES', coreMeta: 'SUPPORTS', destroyedMeta: 'DESTROYED', reset: 'RESET', pause: 'PAUSE', resume: 'RESUME',
     audioOn: 'SOUND ON', audioOff: 'SOUND OFF', languageLabel: 'Language selection', exportLabel: 'Download view as PNG',
     canvasLabel: 'Three-dimensional generative structure area',
     footerManifesto: 'Open plan / generative structure / infinite variation',
     soundCredit: 'Sound: “Contemplation” — Joth / CC0',
-    footerHelp: '<kbd>CTRL</kbd> + select: remove module &nbsp;·&nbsp; drag: orbit view &nbsp;·&nbsp; scroll: zoom',
+    footerHelp: 'select: construct from that point &nbsp;·&nbsp; <kbd>CTRL</kbd> + select: remove &nbsp;·&nbsp; drag: orbit',
     statusReady: 'READY', statusRunning: 'GENERATING', statusRunningProgress: 'GENERATING {current}/{total}',
     statusPaused: 'PAUSED', statusComplete: 'COMPLETE', statusNoCells: 'NO AVAILABLE CELLS',
+    statusDeconstructing: 'DECONSTRUCTING', statusSupports: 'SUPPORTS COLLAPSING', statusVoid: 'VOID',
     noticeDeleteWhileRunning: 'Modules cannot be removed while generating. Pause first.',
     noticeRemoved: 'Module and generation record removed.',
     noticeAudioFailed: 'The browser could not start audio. Try the sound button again.',
@@ -121,6 +123,7 @@ const elements = {
   status: document.querySelector('#status'),
   moduleCount: document.querySelector('#module-count'),
   coreCount: document.querySelector('#core-count'),
+  destroyedCount: document.querySelector('#destroyed-count'),
   notice: document.querySelector('#notice'),
   backgroundAudio: document.querySelector('#background-audio'),
   threeVersion: document.querySelector('#three-version'),
@@ -130,16 +133,26 @@ const elements = {
 };
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(36, 1, 1, 10000);
+const camera = new THREE.PerspectiveCamera(40, 1, 5, 4200);
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
 const controls = new OrbitControls(camera, renderer.domElement);
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 const structureGroup = new THREE.Group();
+const sceneBounds = new THREE.Box3();
+const sceneCenter = new THREE.Vector3();
+const sceneSize = new THREE.Vector3();
+const cameraDesiredPosition = new THREE.Vector3();
+const destructionLightTarget = new THREE.Vector3();
+const constructionLightColor = new THREE.Color(0xfff0d8);
+const destructionLightColor = new THREE.Color(0xff9c78);
 
 let grid;
 let ground;
 let voxelGeometry;
+let sunLight;
+let fillLight;
+let destructionLight;
 let cubeLength = 40;
 let activePalette = 'structure';
 let status = 'ready';
@@ -151,16 +164,28 @@ let noticeTimer = null;
 let random = Math.random;
 let targetModuleCount = 50;
 let targetCoreCount = 20;
+let constructedCount = 0;
+let constructionSinceDestruction = 0;
+let destructionQueued = false;
+let destroyedCount = 0;
+let birthSequence = 0;
+let collapsePhase = 'mass';
+let interventionCount = 0;
+let cameraInteractionActive = false;
+let cameraAutoFrameAfter = 0;
+let lastShadowExtent = 0;
 
 const voxels = new Map();
 const cores = new Set();
 const growthCores = new Set();
+const collapsingVoxels = new Map();
 const backgroundAudio = elements.backgroundAudio;
 backgroundAudio.loop = true;
 backgroundAudio.preload = 'auto';
 backgroundAudio.volume = 0;
 
 let audioWanted = true;
+let audioPlaying = true;
 let audioFadeFrame = null;
 let currentLanguage = localStorage.getItem('autopoiesis-language-v2') === 'tr' ? 'tr' : 'en';
 let statusState = { key: 'statusReady', variables: {} };
@@ -174,36 +199,44 @@ function init() {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.domElement.setAttribute('tabindex', '0');
   elements.viewport.prepend(renderer.domElement);
 
   scene.add(structureGroup);
-  scene.add(new THREE.HemisphereLight(0xf9f5ea, 0x77756f, 2.3));
+  scene.add(new THREE.HemisphereLight(0xfff7e9, 0x273642, 0.72));
 
-  const keyLight = new THREE.DirectionalLight(0xffffff, 3.4);
-  keyLight.position.set(480, 760, 320);
-  keyLight.castShadow = true;
-  keyLight.shadow.mapSize.set(2048, 2048);
-  keyLight.shadow.camera.left = -900;
-  keyLight.shadow.camera.right = 900;
-  keyLight.shadow.camera.top = 900;
-  keyLight.shadow.camera.bottom = -900;
-  scene.add(keyLight);
+  sunLight = new THREE.DirectionalLight(0xfff0d8, 2.45);
+  sunLight.position.set(480, 760, 320);
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.bias = -0.00018;
+  sunLight.shadow.normalBias = 0.035;
+  sunLight.shadow.camera.near = 40;
+  sunLight.shadow.camera.far = 2600;
+  scene.add(sunLight, sunLight.target);
 
-  const fillLight = new THREE.DirectionalLight(0x9cb4d3, 1.1);
+  fillLight = new THREE.DirectionalLight(0x9cb4d3, 0.38);
   fillLight.position.set(-400, 240, -360);
   scene.add(fillLight);
 
+  destructionLight = new THREE.PointLight(0xd13b2f, 0, 520, 2);
+  destructionLight.position.set(0, 80, 0);
+  scene.add(destructionLight);
+
   controls.enableDamping = true;
-  controls.dampingFactor = 0.07;
+  controls.dampingFactor = 0.045;
   controls.minDistance = 180;
   controls.maxDistance = 2600;
+  controls.minPolarAngle = Math.PI * 0.12;
   controls.maxPolarAngle = Math.PI * 0.49;
-  controls.target.set(0, 60, 0);
+  controls.zoomToCursor = true;
+  controls.enablePan = false;
+  controls.target.set(0, 20, 0);
 
   camera.position.set(620, 560, 820);
-  camera.lookAt(controls.target);
+  camera.setFocalLength(45);
+  controls.update();
 
   selectPalette(activePalette);
   bindEvents();
@@ -230,6 +263,13 @@ function bindEvents() {
 
   renderer.domElement.addEventListener('pointermove', handlePointerMove);
   renderer.domElement.addEventListener('pointerleave', clearHover);
+  controls.addEventListener('start', () => {
+    cameraInteractionActive = true;
+  });
+  controls.addEventListener('end', () => {
+    cameraInteractionActive = false;
+    cameraAutoFrameAfter = performance.now() + 4200;
+  });
   elements.pause.addEventListener('click', togglePause);
   elements.reset.addEventListener('click', resetStructure);
   elements.audio.addEventListener('click', toggleAudio);
@@ -250,12 +290,12 @@ function bindEvents() {
 
   document.addEventListener('visibilitychange', handleVisibilityChange);
   document.addEventListener('pointerdown', startDefaultAudio, { capture: true, once: true });
+  document.addEventListener('click', startDefaultAudio, { capture: true });
   backgroundAudio.addEventListener('ended', recoverAudioPlayback);
   backgroundAudio.addEventListener('stalled', recoverAudioPlayback);
   backgroundAudio.addEventListener('pause', () => {
-    if (audioWanted && !document.hidden) {
-      window.setTimeout(attemptDefaultAudio, 250);
-    }
+    audioPlaying = false;
+    updateActionLabels();
   });
 }
 
@@ -296,39 +336,46 @@ function setInstruction(key) {
 }
 
 function updateActionLabels() {
-  elements.audio.setAttribute('aria-pressed', String(audioWanted));
-  elements.audio.textContent = t(audioWanted ? 'audioOff' : 'audioOn');
+  elements.audio.setAttribute('aria-pressed', String(audioPlaying));
+  elements.audio.textContent = t(audioPlaying ? 'audioOff' : 'audioOn');
   elements.pause.textContent = t(paused ? 'resume' : 'pause');
 }
 
 function startDefaultAudio(event) {
-  if (!audioWanted || event.target.closest('#audio')) return;
+  if (!audioWanted || !backgroundAudio.paused) return;
   attemptDefaultAudio();
 }
 
 function attemptDefaultAudio() {
   if (!audioWanted || !backgroundAudio.paused) return;
-  backgroundAudio.play().then(() => fadeAudio(0.2, 900)).catch(() => {
-    // Audible autoplay is commonly blocked; the first pointer gesture retries it.
+  backgroundAudio.play().then(() => {
+    audioPlaying = true;
+    updateActionLabels();
+    fadeAudio(0.2, 900);
+  }).catch(() => {
+    // Keep the default sound-on intent visible; the first user gesture retries playback.
+    audioPlaying = true;
+    updateActionLabels();
   });
 }
 
 async function toggleAudio() {
-  audioWanted = !audioWanted;
-  elements.audio.setAttribute('aria-pressed', String(audioWanted));
-  updateActionLabels();
-
-  if (!audioWanted) {
+  if (audioPlaying || !backgroundAudio.paused) {
+    audioWanted = false;
+    audioPlaying = false;
+    updateActionLabels();
     fadeAudio(0, 500, () => backgroundAudio.pause());
     return;
   }
 
+  audioWanted = true;
   try {
     await backgroundAudio.play();
+    audioPlaying = true;
+    updateActionLabels();
     fadeAudio(0.2, 900);
   } catch {
-    audioWanted = false;
-    elements.audio.setAttribute('aria-pressed', 'false');
+    audioPlaying = false;
     updateActionLabels();
     showNotice(t('noticeAudioFailed'));
   }
@@ -340,9 +387,13 @@ function fadeAudio(targetVolume, duration, onComplete) {
   const startedAt = performance.now();
 
   function step(now) {
-    const progress = Math.min(1, (now - startedAt) / duration);
+    const progress = THREE.MathUtils.clamp((now - startedAt) / duration, 0, 1);
     const eased = 1 - ((1 - progress) ** 3);
-    backgroundAudio.volume = THREE.MathUtils.lerp(startVolume, targetVolume, eased);
+    backgroundAudio.volume = THREE.MathUtils.clamp(
+      THREE.MathUtils.lerp(startVolume, targetVolume, eased),
+      0,
+      1,
+    );
     if (progress < 1) {
       audioFadeFrame = requestAnimationFrame(step);
     } else {
@@ -395,7 +446,17 @@ function rebuildConstructionPlane({ rebuildVoxelGeometry = true } = {}) {
 
   ground = new THREE.Mesh(
     new THREE.PlaneGeometry(size, size),
-    new THREE.ShadowMaterial({ color: 0x11110f, opacity: 0.16 }),
+    new THREE.MeshStandardMaterial({
+      color: palette.background,
+      emissive: palette.accent,
+      emissiveIntensity: 0.025,
+      roughness: 0.92,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.22,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
   );
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -447,27 +508,33 @@ function handleScaleChange() {
 
 function handleCanvasSelection(event) {
   updateRaycaster(event);
+  const structureHit = raycaster.intersectObjects(structureGroup.children, false)[0];
 
   if (event.ctrlKey || event.metaKey) {
-    if (status === 'running') {
+    if (status === 'running' || status === 'collapse') {
       showNotice(t('noticeDeleteWhileRunning'));
       return;
     }
-    const hit = raycaster.intersectObjects(structureGroup.children, false)[0];
-    if (hit) removeVoxel(hit.object.userData.key);
+    if (structureHit) removeVoxel(structureHit.object.userData.key);
     return;
   }
 
-  if (status === 'complete') {
-    const hit = raycaster.intersectObjects(structureGroup.children, false)[0];
-    if (hit) extendStructure(hit.object.userData.key);
+  if (structureHit && (status === 'running' || status === 'collapse')) {
+    continueConstruction({ anchorKey: structureHit.object.userData.key });
     return;
   }
 
-  if (status !== 'ready') return;
-  const hit = raycaster.intersectObject(ground, false)[0];
-  if (!hit) return;
-  startStructure(hit.point);
+  const groundHit = raycaster.intersectObject(ground, false)[0];
+  if (!groundHit) return;
+
+  if (status === 'ready' || status === 'void') {
+    startStructure(groundHit.point);
+    return;
+  }
+
+  if (status === 'running' || status === 'collapse') {
+    continueConstruction({ point: groundHit.point });
+  }
 }
 
 function startStructure(point) {
@@ -475,6 +542,13 @@ function startStructure(point) {
   cubeLength = settings.cubeLength;
   targetModuleCount = settings.iteration;
   targetCoreCount = Math.max(1, Math.round(targetModuleCount * settings.corePercentage / 100));
+  constructedCount = 0;
+  constructionSinceDestruction = 0;
+  destructionQueued = false;
+  destroyedCount = 0;
+  birthSequence = 0;
+  collapsePhase = 'mass';
+  interventionCount = 0;
   random = mulberry32(hashSeed(settings.seed));
   status = 'running';
   paused = false;
@@ -487,7 +561,10 @@ function startStructure(point) {
     z: snapCoordinate(point.z),
   };
 
-  addVoxel(start, 'core');
+  if (addVoxel(start, 'core')) {
+    constructedCount = 1;
+    constructionSinceDestruction = 1;
+  }
   setConfigurationLocked(true);
   elements.instruction.classList.add('is-hidden');
   elements.pause.disabled = false;
@@ -496,25 +573,46 @@ function startStructure(point) {
   scheduleNextStep(runToken, settings.interval);
 }
 
-function extendStructure(anchorKey) {
-  const anchor = voxels.get(anchorKey);
-  if (!anchor) return;
+function continueConstruction({ anchorKey, point }) {
   const settings = readSettings();
-
-  promoteToCore(anchor);
-  growthCores.clear();
-  growthCores.add(anchorKey);
-  targetModuleCount = voxels.size + settings.iteration;
-  targetCoreCount = cores.size + Math.max(1, Math.round(settings.iteration * settings.corePercentage / 100));
-  random = mulberry32(hashSeed(`${settings.seed}:${anchorKey}:${voxels.size}`));
+  runToken += 1;
+  interventionCount += 1;
+  cancelAllCollapses();
   status = 'running';
   paused = false;
-  runToken += 1;
+  collapsePhase = 'mass';
+  growthCores.clear();
 
+  let anchor = anchorKey ? voxels.get(anchorKey) : null;
+  if (!anchor && point) {
+    const position = {
+      x: snapCoordinate(point.x),
+      y: cubeLength / 2,
+      z: snapCoordinate(point.z),
+    };
+    const key = positionKey(position);
+    anchor = voxels.get(key);
+    if (!anchor && addVoxel(position, 'core')) {
+      anchor = voxels.get(key);
+      constructedCount += 1;
+    }
+  }
+  if (!anchor) return;
+
+  promoteToCore(anchor);
+  growthCores.add(anchor.key);
+  targetModuleCount = constructedCount + settings.iteration;
+  targetCoreCount = cores.size
+    + Math.max(1, Math.round(settings.iteration * settings.corePercentage / 100));
+  random = mulberry32(hashSeed(
+    `${settings.seed}:${anchor.key}:${constructedCount}:${destroyedCount}`,
+  ));
+
+  setConfigurationLocked(true);
   elements.instruction.classList.add('is-hidden');
   elements.pause.disabled = false;
   updateActionLabels();
-  setStatus('statusRunningProgress', { current: voxels.size, total: targetModuleCount });
+  updateCounters();
   scheduleNextStep(runToken, settings.interval);
 }
 
@@ -527,10 +625,12 @@ function promoteToCore(voxel) {
   voxel.mesh.material.roughness = 0.48;
   voxel.mesh.material.metalness = 0.18;
   voxel.mesh.material.wireframe = true;
-  voxel.mesh.material.needsUpdate = true;
+  voxel.mesh.material.transparent = false;
+  voxel.mesh.material.opacity = 1;
+  voxel.mesh.material.depthWrite = true;
   voxel.mesh.castShadow = false;
+  voxel.mesh.material.needsUpdate = true;
   cores.add(voxel.key);
-  updateCounters();
 }
 
 function snapCoordinate(value) {
@@ -541,23 +641,61 @@ function snapCoordinate(value) {
 
 function scheduleNextStep(token, interval) {
   if (token !== runToken || paused || status !== 'running') return;
-  if (voxels.size >= targetModuleCount) {
-    finishStructure();
+  if (constructedCount >= targetModuleCount) {
+    beginFinalCollapse(token, interval);
     return;
   }
 
+  const nextDelay = destructionQueued
+    ? getDeconstructionInterval(interval)
+    : getConstructionInterval(interval);
+
   window.setTimeout(() => {
     if (token !== runToken || paused || status !== 'running') return;
+
+    if (destructionQueued && destroyOldestBlock(interval)) {
+      destructionQueued = false;
+      scheduleNextStep(token, interval);
+      return;
+    }
+
     const frontier = getFrontier();
     if (frontier.length === 0) {
-      finishStructure('statusNoCells');
+      beginFinalCollapse(token, interval);
       return;
     }
 
     const position = frontier[Math.floor(random() * frontier.length)];
-    addVoxel(position, chooseVoxelType());
+    if (addVoxel(position, chooseVoxelType())) {
+      constructedCount += 1;
+      constructionSinceDestruction += 1;
+      if (constructionSinceDestruction >= getConstructionPerDestruction()) {
+        constructionSinceDestruction = 0;
+        destructionQueued = true;
+      }
+      updateCounters();
+    }
     scheduleNextStep(token, interval);
-  }, interval);
+  }, nextDelay);
+}
+
+function getConstructionInterval(baseInterval) {
+  return Math.max(16, baseInterval * (1 + interventionCount * 0.38));
+}
+
+function getDeconstructionInterval(baseInterval) {
+  return Math.max(18, baseInterval / (1 + interventionCount * 0.72));
+}
+
+function getConstructionPerDestruction() {
+  return Math.max(2, 5 - interventionCount);
+}
+
+function getDeconstructionDuration(baseInterval, finalCollapse = false) {
+  const baseDuration = finalCollapse
+    ? Math.max(720, baseInterval * 7)
+    : Math.max(620, baseInterval * 6);
+  return Math.max(220, baseDuration / (1 + interventionCount * 0.48));
 }
 
 function getFrontier() {
@@ -565,17 +703,45 @@ function getFrontier() {
   for (const coreKey of growthCores) {
     const core = voxels.get(coreKey);
     if (!core) continue;
-    for (const direction of DIRECTIONS) {
-      const position = {
-        x: core.position.x + direction.x * cubeLength,
-        y: core.position.y + direction.y * cubeLength,
-        z: core.position.z + direction.z * cubeLength,
-      };
-      const key = positionKey(position);
-      if (!voxels.has(key) && isAllowedPosition(position)) candidates.set(key, position);
+    collectOpenNeighbors(core, candidates);
+  }
+  if (candidates.size > 0) return [...candidates.values()];
+
+  const originKey = growthCores.values().next().value;
+  const origin = voxels.get(originKey);
+  if (!origin) return [];
+
+  let nearestDistance = Infinity;
+  for (const coreKey of cores) {
+    if (growthCores.has(coreKey)) continue;
+    const core = voxels.get(coreKey);
+    if (!core) continue;
+    const localCandidates = new Map();
+    collectOpenNeighbors(core, localCandidates);
+    if (localCandidates.size === 0) continue;
+    const distance = Math.abs(core.position.x - origin.position.x)
+      + Math.abs(core.position.y - origin.position.y)
+      + Math.abs(core.position.z - origin.position.z);
+    if (distance > nearestDistance) continue;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      candidates.clear();
     }
+    for (const [key, position] of localCandidates) candidates.set(key, position);
   }
   return [...candidates.values()];
+}
+
+function collectOpenNeighbors(voxel, candidates) {
+  for (const direction of DIRECTIONS) {
+    const position = {
+      x: voxel.position.x + direction.x * cubeLength,
+      y: voxel.position.y + direction.y * cubeLength,
+      z: voxel.position.z + direction.z * cubeLength,
+    };
+    const key = positionKey(position);
+    if (!voxels.has(key) && isAllowedPosition(position)) candidates.set(key, position);
+  }
 }
 
 function isAllowedPosition(position) {
@@ -587,7 +753,7 @@ function isAllowedPosition(position) {
 
 function chooseVoxelType() {
   const coresNeeded = targetCoreCount - cores.size;
-  const placementsRemaining = targetModuleCount - voxels.size;
+  const placementsRemaining = targetModuleCount - constructedCount;
   if (coresNeeded <= 0) return 'block';
   if (coresNeeded >= placementsRemaining) return 'core';
   return random() < coresNeeded / placementsRemaining ? 'core' : 'block';
@@ -611,7 +777,14 @@ function addVoxel(position, type) {
   mesh.userData = { key, type };
   structureGroup.add(mesh);
 
-  voxels.set(key, { key, type, position: { ...position }, mesh });
+  voxels.set(key, {
+    key,
+    type,
+    position: { ...position },
+    mesh,
+    bornOrder: birthSequence,
+  });
+  birthSequence += 1;
   if (type === 'core') {
     cores.add(key);
     growthCores.add(key);
@@ -624,27 +797,13 @@ function removeVoxel(key) {
   const voxel = voxels.get(key);
   if (!voxel) return;
   clearHover();
-  structureGroup.remove(voxel.mesh);
-  voxel.mesh.material.dispose();
-  voxels.delete(key);
-  cores.delete(key);
-  growthCores.delete(key);
+  finalizeVoxelRemoval(key, false);
   updateCounters();
   showNotice(t('noticeRemoved'));
 }
 
 function positionKey({ x, y, z }) {
   return `${x},${y},${z}`;
-}
-
-function finishStructure(statusKey = 'statusComplete') {
-  status = 'complete';
-  paused = false;
-  elements.pause.disabled = true;
-  updateActionLabels();
-  setStatus(statusKey);
-  setInstruction('instructionContinue');
-  elements.instruction.classList.remove('is-hidden');
 }
 
 function togglePause() {
@@ -670,8 +829,16 @@ function resetStructure() {
   for (const voxel of voxels.values()) voxel.mesh.material.dispose();
   structureGroup.clear();
   voxels.clear();
+  collapsingVoxels.clear();
   cores.clear();
   growthCores.clear();
+  constructedCount = 0;
+  constructionSinceDestruction = 0;
+  destructionQueued = false;
+  destroyedCount = 0;
+  birthSequence = 0;
+  collapsePhase = 'mass';
+  interventionCount = 0;
   setConfigurationLocked(false);
   elements.pause.disabled = true;
   updateActionLabels();
@@ -755,8 +922,9 @@ function updateRaycaster(event) {
 function updateCounters() {
   elements.moduleCount.textContent = String(voxels.size).padStart(3, '0');
   elements.coreCount.textContent = String(cores.size).padStart(3, '0');
+  elements.destroyedCount.textContent = String(destroyedCount).padStart(3, '0');
   if (status === 'running') {
-    setStatus('statusRunningProgress', { current: voxels.size, total: targetModuleCount });
+    setStatus('statusRunningProgress', { current: constructedCount, total: targetModuleCount });
   }
 }
 
@@ -805,7 +973,242 @@ function mulberry32(seed) {
   };
 }
 
-function render() {
+function getOldestVoxel(type) {
+  let oldest = null;
+  for (const voxel of voxels.values()) {
+    if (voxel.type !== type || collapsingVoxels.has(voxel.key)) continue;
+    if (!oldest || voxel.bornOrder < oldest.bornOrder) oldest = voxel;
+  }
+  return oldest;
+}
+
+function destroyOldestBlock(interval) {
+  const voxel = getOldestVoxel('block');
+  if (!voxel) return false;
+  return beginVoxelCollapse(voxel.key, getDeconstructionDuration(interval));
+}
+
+function beginVoxelCollapse(key, duration = 900) {
+  const voxel = voxels.get(key);
+  if (!voxel || collapsingVoxels.has(key)) return false;
+  clearHover();
+  voxel.mesh.material.transparent = true;
+  voxel.mesh.material.depthWrite = false;
+  voxel.mesh.material.emissive.setHex(PALETTES[activePalette].accent);
+  voxel.mesh.material.needsUpdate = true;
+  collapsingVoxels.set(key, {
+    key,
+    startedAt: performance.now(),
+    duration,
+    startY: voxel.mesh.position.y,
+    spinDirection: (hashSeed(key) & 1) === 0 ? -1 : 1,
+  });
+  return true;
+}
+
+function cancelAllCollapses() {
+  for (const key of collapsingVoxels.keys()) {
+    const voxel = voxels.get(key);
+    if (!voxel) continue;
+    voxel.mesh.position.copy(voxel.position);
+    voxel.mesh.rotation.set(0, 0, 0);
+    voxel.mesh.scale.setScalar(1);
+    voxel.mesh.material.opacity = 1;
+    voxel.mesh.material.transparent = false;
+    voxel.mesh.material.depthWrite = true;
+    voxel.mesh.material.emissive.setHex(0x000000);
+    voxel.mesh.material.emissiveIntensity = 0;
+    voxel.mesh.material.needsUpdate = true;
+  }
+  collapsingVoxels.clear();
+  destructionLight.intensity = 0;
+}
+
+function finalizeVoxelRemoval(key, countAsDestruction = true) {
+  const voxel = voxels.get(key);
+  if (!voxel) return;
+  structureGroup.remove(voxel.mesh);
+  voxel.mesh.material.dispose();
+  voxels.delete(key);
+  collapsingVoxels.delete(key);
+  cores.delete(key);
+  growthCores.delete(key);
+  if (countAsDestruction) destroyedCount += 1;
+  updateCounters();
+}
+
+function beginFinalCollapse(token, interval) {
+  if (token !== runToken) return;
+  status = 'collapse';
+  paused = false;
+  collapsePhase = 'mass';
+  elements.pause.disabled = true;
+  updateActionLabels();
+  setStatus('statusDeconstructing');
+  window.setTimeout(
+    () => scheduleFinalCollapse(token, interval),
+    Math.max(360, 1300 / (1 + interventionCount * 0.5)),
+  );
+}
+
+function scheduleFinalCollapse(token, interval) {
+  if (token !== runToken || status !== 'collapse') return;
+  const type = collapsePhase === 'mass' ? 'block' : 'core';
+  const candidate = getOldestVoxel(type);
+
+  if (candidate) {
+    beginVoxelCollapse(candidate.key, getDeconstructionDuration(interval, true));
+    window.setTimeout(
+      () => scheduleFinalCollapse(token, interval),
+      Math.max(
+        28,
+        (interval * (collapsePhase === 'mass' ? 1.6 : 2.2))
+          / (1 + interventionCount * 0.68),
+      ),
+    );
+    return;
+  }
+
+  const typeStillCollapsing = [...collapsingVoxels.keys()]
+    .some((key) => voxels.get(key)?.type === type);
+  if (typeStillCollapsing) {
+    window.setTimeout(() => scheduleFinalCollapse(token, interval), 120);
+    return;
+  }
+
+  if (collapsePhase === 'mass') {
+    collapsePhase = 'supports';
+    setStatus('statusSupports');
+    window.setTimeout(
+      () => scheduleFinalCollapse(token, interval),
+      Math.max(480, 1800 / (1 + interventionCount * 0.5)),
+    );
+    return;
+  }
+
+  if (voxels.size > 0 || collapsingVoxels.size > 0) {
+    window.setTimeout(() => scheduleFinalCollapse(token, interval), 120);
+    return;
+  }
+  finishVoid();
+}
+
+function finishVoid() {
+  status = 'void';
+  setStatus('statusVoid');
+  setInstruction('instructionContinue');
+  elements.instruction.classList.remove('is-hidden');
+}
+
+function updateCollapseAnimations(now) {
+  destructionLightTarget.set(0, cubeLength, 0);
+  let activeCount = 0;
+
+  for (const [key, collapse] of collapsingVoxels) {
+    const voxel = voxels.get(key);
+    if (!voxel) continue;
+    const progress = THREE.MathUtils.clamp(
+      (now - collapse.startedAt) / collapse.duration,
+      0,
+      1,
+    );
+    const fall = progress * progress;
+    const shrink = Math.max(0.025, 1 - fall * 0.96);
+    voxel.mesh.position.y = collapse.startY - cubeLength * (fall * 2.6);
+    voxel.mesh.rotation.x = fall * 0.75 * collapse.spinDirection;
+    voxel.mesh.rotation.z = fall * 1.15 * collapse.spinDirection;
+    voxel.mesh.scale.set(shrink, Math.max(0.018, 1 - fall * 1.18), shrink);
+    voxel.mesh.material.opacity = 1 - fall;
+    voxel.mesh.material.emissiveIntensity = 0.12 + Math.sin(progress * Math.PI) * 0.72;
+    destructionLightTarget.add(voxel.mesh.position);
+    activeCount += 1;
+    if (progress >= 1) finalizeVoxelRemoval(key);
+  }
+
+  if (activeCount > 0) destructionLightTarget.multiplyScalar(1 / (activeCount + 1));
+  destructionLight.position.lerp(destructionLightTarget, 0.08);
+  destructionLight.intensity = THREE.MathUtils.lerp(
+    destructionLight.intensity,
+    activeCount > 0 ? 1150 + activeCount * 90 : 0,
+    0.08,
+  );
+}
+
+function updateCinematicCameraAndLights(now) {
+  sceneBounds.makeEmpty();
+  if (structureGroup.children.length > 0) sceneBounds.expandByObject(structureGroup);
+  if (sceneBounds.isEmpty()) {
+    sceneCenter.set(0, cubeLength, 0);
+    sceneSize.set(cubeLength * 8, cubeLength * 4, cubeLength * 8);
+  } else {
+    sceneBounds.getCenter(sceneCenter);
+    sceneBounds.getSize(sceneSize);
+  }
+
+  const dramaticPhase = status === 'collapse' || status === 'void';
+  const targetY = dramaticPhase
+    ? THREE.MathUtils.clamp(sceneCenter.y * 0.28, cubeLength * 0.35, cubeLength * 1.4)
+    : THREE.MathUtils.clamp(sceneCenter.y * 0.48, cubeLength, cubeLength * 3);
+  const maxDimension = Math.max(sceneSize.x, sceneSize.y, sceneSize.z, cubeLength * 8);
+  const desiredDistance = THREE.MathUtils.clamp(
+    (maxDimension * 0.76) / Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)),
+    760,
+    2200,
+  );
+
+  if (!cameraInteractionActive && now >= cameraAutoFrameAfter) {
+    const orbitAngle = now * (dramaticPhase ? 0.000085 : 0.000045) + 0.72;
+    const verticalRatio = dramaticPhase ? 0.2 : 0.42;
+    const horizontalDistance = desiredDistance * Math.sqrt(1 - verticalRatio ** 2);
+    controls.target.lerp(new THREE.Vector3(sceneCenter.x, targetY, sceneCenter.z), 0.018);
+    cameraDesiredPosition.set(
+      sceneCenter.x + Math.cos(orbitAngle) * horizontalDistance,
+      targetY + desiredDistance * verticalRatio,
+      sceneCenter.z + Math.sin(orbitAngle) * horizontalDistance,
+    );
+    camera.position.lerp(cameraDesiredPosition, dramaticPhase ? 0.014 : 0.009);
+  }
+
+  const lightAngle = now * (dramaticPhase ? 0.00011 : 0.000052) + 1.1;
+  const lightRadius = Math.max(520, maxDimension * 1.35);
+  sunLight.target.position.lerp(sceneCenter, 0.035);
+  sunLight.position.set(
+    sceneCenter.x + Math.cos(lightAngle) * lightRadius,
+    sceneCenter.y + 620 + Math.sin(now * 0.0007) * 110,
+    sceneCenter.z + Math.sin(lightAngle) * lightRadius,
+  );
+  sunLight.color.lerp(dramaticPhase ? destructionLightColor : constructionLightColor, 0.025);
+  sunLight.intensity = THREE.MathUtils.lerp(
+    sunLight.intensity,
+    dramaticPhase ? 2.9 + Math.sin(now * 0.003) * 0.32 : 2.35,
+    0.035,
+  );
+  fillLight.position.set(
+    sceneCenter.x - Math.cos(lightAngle) * lightRadius * 0.72,
+    sceneCenter.y + 180,
+    sceneCenter.z - Math.sin(lightAngle) * lightRadius * 0.72,
+  );
+  fillLight.intensity = THREE.MathUtils.lerp(fillLight.intensity, dramaticPhase ? 0.18 : 0.42, 0.03);
+  renderer.toneMappingExposure = THREE.MathUtils.lerp(
+    renderer.toneMappingExposure,
+    status === 'void' ? 0.72 : dramaticPhase ? 0.88 : 1.05,
+    0.02,
+  );
+
+  const shadowExtent = THREE.MathUtils.clamp(maxDimension * 0.68, 240, 1050);
+  if (Math.abs(shadowExtent - lastShadowExtent) > 20) {
+    sunLight.shadow.camera.left = -shadowExtent;
+    sunLight.shadow.camera.right = shadowExtent;
+    sunLight.shadow.camera.top = shadowExtent;
+    sunLight.shadow.camera.bottom = -shadowExtent;
+    sunLight.shadow.camera.updateProjectionMatrix();
+    lastShadowExtent = shadowExtent;
+  }
+}
+
+function render(now = performance.now()) {
+  updateCollapseAnimations(now);
+  updateCinematicCameraAndLights(now);
   controls.update();
   renderer.render(scene, camera);
 }
